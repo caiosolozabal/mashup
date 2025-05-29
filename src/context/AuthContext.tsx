@@ -14,7 +14,8 @@ import {
   User
 } from "firebase/auth";
 import { app } from "@/lib/firebaseConfig";
-import { doc, getDoc, getFirestore } from "firebase/firestore";
+// CORREÇÃO: Importar collection, query, where, getDocs em vez de doc, getDoc
+import { collection, query, where, getDocs, getFirestore } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 
 const auth = getAuth(app);
@@ -65,16 +66,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (firebaseUser) {
         try {
-          // Buscar perfil completo na coleção unificada "users"
-          const userRef = doc(db, "users", firebaseUser.uid);
-          const userSnap = await getDoc(userRef);
+          // CORREÇÃO: Buscar perfil usando query com where("uid", "==", firebaseUser.uid)
+          const usersRef = collection(db, "users");
+          const q = query(usersRef, where("uid", "==", firebaseUser.uid));
+          const querySnapshot = await getDocs(q);
 
-          if (userSnap.exists()) {
-            const userData = userSnap.data();
+          if (!querySnapshot.empty) {
+            // Assume que uid é único, pega o primeiro documento encontrado
+            const userDoc = querySnapshot.docs[0];
+            const userData = userDoc.data();
             
             // Construir o perfil completo com todos os campos
             const perfilCompleto: PerfilUsuario = {
-              uid: firebaseUser.uid,
+              uid: firebaseUser.uid, // Garante que o uid do Auth seja usado
               email: userData.email || firebaseUser.email || "",
               nome: userData.nome || "",
               role: userData.role || "dj",
@@ -93,7 +97,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             };
             
             setPerfil(perfilCompleto);
-            console.log("✅ Perfil carregado com sucesso:", perfilCompleto.role);
+            console.log("✅ Perfil carregado com sucesso (via query):");
           } else {
             console.warn("⚠️ Perfil não encontrado no Firestore para o UID:", firebaseUser.uid);
             setPerfil(null);
@@ -156,3 +160,4 @@ export function useAuth() {
   }
   return context;
 }
+
