@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { collection, addDoc, serverTimestamp, query, where, getDocs, doc, updateDoc, getDoc } from "firebase/firestore";
+// CORREÇÃO: Importar doc, setDoc, updateDoc
+import { collection, addDoc, serverTimestamp, query, where, getDocs, doc, setDoc, updateDoc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebaseConfig";
 import { getAuth, createUserWithEmailAndPassword } from "firebase/auth";
 import { DJ } from "@/lib/eventService";
@@ -115,9 +116,10 @@ export default function ManageUsersPage() {
       const userCredential = await createUserWithEmailAndPassword(auth, formData.email, formData.senha);
       const uid = userCredential.user.uid;
       
-      // Salvar dados do usuário no Firestore
-      await addDoc(collection(db, "users"), {
-        uid: uid,
+      // CORREÇÃO: Salvar dados do usuário no Firestore usando o UID como ID do documento
+      const userDocRef = doc(db, "users", uid); // Cria a referência com o UID
+      await setDoc(userDocRef, { // Usa setDoc para definir o documento com o ID específico
+        uid: uid, // Ainda salva o uid como campo para consistência ou futuras queries
         email: formData.email,
         nome: formData.nome,
         role: formData.role,
@@ -537,21 +539,14 @@ export default function ManageUsersPage() {
                     >
                       <option value="corrente">Corrente</option>
                       <option value="poupanca">Poupança</option>
+                      <option value="pagamento">Pagamento</option>
                     </select>
                   </div>
                 </>
               )}
             </div>
             
-            <div className="mt-6 flex space-x-4">
-              <button
-                type="submit"
-                disabled={loading}
-                className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
-              >
-                {loading ? "Processando..." : editingUser ? "Atualizar" : "Criar"}
-              </button>
-              
+            <div className="mt-6 flex justify-end gap-4">
               <button
                 type="button"
                 onClick={handleCancel}
@@ -559,80 +554,58 @@ export default function ManageUsersPage() {
               >
                 Cancelar
               </button>
+              <button
+                type="submit"
+                disabled={loading}
+                className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded disabled:opacity-50"
+              >
+                {loading ? "Salvando..." : (editingUser ? "Atualizar Usuário" : "Criar Usuário")}
+              </button>
             </div>
           </form>
         </div>
       )}
       
-      {/* Lista de Usuários */}
-      <div className="bg-white rounded-lg shadow-md overflow-hidden">
-        <h2 className="text-xl font-bold p-4 bg-gray-100">Lista de Usuários</h2>
+      <div className="bg-white p-6 rounded-lg shadow-md">
+        <h2 className="text-xl font-bold mb-4">Lista de Usuários</h2>
         
-        {loading && !showForm && !editingUser ? (
-          <div className="p-4 text-center">Carregando...</div>
+        {loading && !users.length ? (
+          <p>Carregando usuários...</p>
+        ) : users.length === 0 ? (
+          <p>Nenhum usuário encontrado.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Nome
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Email
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Função
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Status
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Ações
-                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nome</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Função</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {users.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="px-6 py-4 text-center">
-                      Nenhum usuário encontrado.
+                {users.map((user) => (
+                  <tr key={user.id}>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{user.nome}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{user.email}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{user.role}</td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${user.status === 'ativo' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                        {user.status}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                      <button
+                        onClick={() => startEditingUser(user)}
+                        className="text-indigo-600 hover:text-indigo-900"
+                      >
+                        Editar
+                      </button>
                     </td>
                   </tr>
-                ) : (
-                  users.map((user) => (
-                    <tr key={user.id}>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        {user.nome}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        {user.email}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        {user.role === "admin" ? "Admin" : "DJ"}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span
-                          className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                            user.status === "ativo"
-                              ? "bg-green-100 text-green-800"
-                              : "bg-red-100 text-red-800"
-                          }`}
-                        >
-                          {user.status === "ativo" ? "Ativo" : "Inativo"}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <button
-                          onClick={() => startEditingUser(user)}
-                          className="text-indigo-600 hover:text-indigo-900 mr-4"
-                        >
-                          Editar
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
+                ))}
               </tbody>
             </table>
           </div>

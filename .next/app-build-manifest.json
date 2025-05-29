@@ -6,25 +6,30 @@
       "static/css/app/layout.css",
       "static/chunks/app/layout.js"
     ],
-    "/dashboard/dj/agenda/page": [
+    "/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/dashboard/dj/agenda/page.js"
+      "static/chunks/app/page.js"
     ],
-    "/dashboard/dj/financeiro/page": [
+    "/login/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/dashboard/dj/financeiro/page.js"
+      "static/chunks/app/login/page.js"
     ],
     "/dashboard/dj/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/chunks/app/dashboard/dj/page.js"
     ],
-    "/login/page": [
+    "/dashboard/dj/create-event/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/login/page.js"
+      "static/chunks/app/dashboard/dj/create-event/page.js"
+    ],
+    "/dashboard/dj/agenda/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/dashboard/dj/agenda/page.js"
     ],
     "/dashboard/admin/page": [
       "static/chunks/webpack.js",
@@ -41,40 +46,25 @@
       "static/chunks/main-app.js",
       "static/chunks/app/dashboard/admin/manage-events/table/page.js"
     ],
-    "/dashboard/admin/manage-events/calendar/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/dashboard/admin/manage-events/calendar/page.js"
-    ],
     "/dashboard/admin/financeiro/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/chunks/app/dashboard/admin/financeiro/page.js"
+    ],
+    "/dashboard/dj/financeiro/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/dashboard/dj/financeiro/page.js"
     ],
     "/dashboard/admin/manage-users/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/chunks/app/dashboard/admin/manage-users/page.js"
     ],
-    "/dashboard/admin/manage-events/edit/[id]/page": [
+    "/_not-found/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/dashboard/admin/manage-events/edit/[id]/page.js"
-    ],
-    "/dashboard/dj/create-event/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/dashboard/dj/create-event/page.js"
-    ],
-    "/dashboard/dj/eventos/[id]/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/dashboard/dj/eventos/[id]/page.js"
-    ],
-    "/dashboard/dj/edit-event/[id]/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/dashboard/dj/edit-event/[id]/page.js"
+      "static/chunks/app/_not-found/page.js"
     ]
   }
 }
