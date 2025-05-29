@@ -1,0 +1,8 @@
+{
+  "/dashboard/dj/financeiro/page": "app/dashboard/dj/financeiro/page.js",
+  "/dashboard/dj/page": "app/dashboard/dj/page.js",
+  "/dashboard/dj/agenda/page": "app/dashboard/dj/agenda/page.js",
+  "/dashboard/dj/create-event/page": "app/dashboard/dj/create-event/page.js",
+  "/dashboard/dj/eventos/[id]/page": "app/dashboard/dj/eventos/[id]/page.js",
+  "/dashboard/dj/edit-event/[id]/page": "app/dashboard/dj/edit-event/[id]/page.js"
+}
