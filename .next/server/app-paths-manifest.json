@@ -1,10 +1,5 @@
 {
-  "/dashboard/admin/manage-events/edit/[id]/page": "app/dashboard/admin/manage-events/edit/[id]/page.js",
-  "/dashboard/admin/financeiro/page": "app/dashboard/admin/financeiro/page.js",
-  "/login/page": "app/login/page.js",
   "/dashboard/admin/manage-events/table/page": "app/dashboard/admin/manage-events/table/page.js",
-  "/dashboard/dj/agenda/page": "app/dashboard/dj/agenda/page.js",
-  "/dashboard/admin/page": "app/dashboard/admin/page.js",
-  "/dashboard/admin/manage-events/page": "app/dashboard/admin/manage-events/page.js",
-  "/dashboard/admin/manage-events/calendar/page": "app/dashboard/admin/manage-events/calendar/page.js"
+  "/dashboard/admin/settings/page": "app/dashboard/admin/settings/page.js",
+  "/dashboard/admin/page": "app/dashboard/admin/page.js"
 }

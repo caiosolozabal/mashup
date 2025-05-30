@@ -69,19 +69,7 @@ export default function AdminPage() {
             </div>
           </div>
         </Link>
-        
-        {/* Card de Aprovação de Eventos */}
-        <Link href="/dashboard/admin/approve-events">
-          <div className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow cursor-pointer">
-            <h2 className="text-xl font-semibold mb-4">Aprovação de Eventos</h2>
-            <p className="text-gray-600 mb-4">
-              Aprove ou rejeite eventos pendentes cadastrados pelos DJs.
-            </p>
-            <div className="flex justify-end">
-              <span className="text-blue-500 font-medium">Acessar →</span>
-            </div>
-          </div>
-        </Link>
+      
         
         {/* Card de Configurações */}
         <Link href="/dashboard/admin/settings">
