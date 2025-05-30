@@ -14,8 +14,8 @@ import {
   User
 } from "firebase/auth";
 import { app } from "@/lib/firebaseConfig";
-// CORREÇÃO: Importar doc, getDoc, collection, query, where, getDocs
-import { doc, getDoc, collection, query, where, getDocs, getFirestore, DocumentSnapshot, DocumentData } from "firebase/firestore";
+// Versão Simplificada: Importar apenas doc e getDoc
+import { doc, getDoc, getFirestore } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 
 const auth = getAuth(app);
@@ -63,42 +63,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
-      setLoading(true); // Start loading when auth state changes
+      setLoading(true); // Inicia carregamento
 
       if (firebaseUser) {
-        let userDocSnap: DocumentSnapshot<DocumentData> | null = null;
-        let userData: DocumentData | null = null;
-
         try {
-          // CORREÇÃO HÍBRIDA: Tentar buscar pelo ID do documento primeiro (usuários antigos)
-          console.log(`[AuthContext] Tentando buscar perfil por ID: ${firebaseUser.uid}`);
-          const userRefById = doc(db, "users", firebaseUser.uid);
-          userDocSnap = await getDoc(userRefById);
+          // Versão Simplificada: Buscar perfil diretamente pelo ID (UID)
+          console.log(`[AuthContext] Buscando perfil por ID: ${firebaseUser.uid}`);
+          const userRef = doc(db, "users", firebaseUser.uid);
+          const userSnap = await getDoc(userRef);
 
-          if (userDocSnap.exists()) {
-            console.log("[AuthContext] Perfil encontrado por ID.");
-            userData = userDocSnap.data();
-          } else {
-            // Se não encontrou por ID, tentar buscar pelo campo uid (usuários novos)
-            console.log(`[AuthContext] Perfil não encontrado por ID, tentando buscar por campo uid: ${firebaseUser.uid}`);
-            const usersRef = collection(db, "users");
-            const q = query(usersRef, where("uid", "==", firebaseUser.uid));
-            const querySnapshot = await getDocs(q);
-
-            if (!querySnapshot.empty) {
-              console.log("[AuthContext] Perfil encontrado por campo uid.");
-              // Assume que uid é único, pega o primeiro documento encontrado
-              userDocSnap = querySnapshot.docs[0];
-              userData = userDocSnap.data();
-            } else {
-              console.warn("⚠️ Perfil não encontrado no Firestore nem por ID nem por campo uid:", firebaseUser.uid);
-            }
-          }
-
-          // Se encontrou userData por qualquer método
-          if (userData) {
+          if (userSnap.exists()) {
+            const userData = userSnap.data();
+            
+            // Construir o perfil completo com todos os campos
             const perfilCompleto: PerfilUsuario = {
-              uid: firebaseUser.uid, // Garante que o uid do Auth seja usado
+              uid: firebaseUser.uid,
               email: userData.email || firebaseUser.email || "",
               nome: userData.nome || "",
               role: userData.role || "dj",
@@ -114,13 +93,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               telefone: userData.telefone,
               tipo_conta: userData.tipo_conta
             };
+            
             setPerfil(perfilCompleto);
-            console.log("✅ Perfil carregado com sucesso:", perfilCompleto.role);
+            console.log("✅ Perfil carregado com sucesso (ID = UID):");
           } else {
-            // Se não encontrou por nenhum método
+            console.warn("⚠️ Perfil não encontrado no Firestore para o UID (ID = UID):");
             setPerfil(null);
           }
-
         } catch (error) {
           console.error("❌ Erro ao buscar perfil:", error);
           setPerfil(null);
@@ -130,7 +109,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setPerfil(null);
       }
 
-      setLoading(false); // Finish loading after attempting to fetch profile or if logged out
+      setLoading(false); // Finaliza carregamento
     });
 
     return () => unsubscribe();

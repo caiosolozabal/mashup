@@ -1,19 +1,52 @@
 "use client";
 
-import { useState, useEffect } from "react";
-// CORREÇÃO: Garantir que a importação está correta
-import { Evento, getVisibleDjEvents } from "@/lib/djService";
+import { useState, useEffect, useRef } from "react";
+import { Evento, getVisibleDjEvents } from "@/lib/djService"; // Usar djService para buscar eventos do DJ
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { format, parseISO } from "date-fns";
+import { ptBR } from "date-fns/locale";
+
+// FullCalendar e plugins
+import FullCalendar from "@fullcalendar/react";
+import dayGridPlugin from "@fullcalendar/daygrid";
+import timeGridPlugin from "@fullcalendar/timegrid";
+import interactionPlugin from "@fullcalendar/interaction";
+
+// Interface para Evento do Calendário (simplificada para DJ)
+interface EventoCalendarioDJ {
+  id: string;
+  title: string;
+  start: string;
+  end?: string;
+  allDay: boolean;
+  extendedProps: {
+    local: string;
+    horario: string;
+    valor_total: number;
+    custos: number;
+    status_pgto: string;
+    tipo_evento: string;
+    contratante_nome: string;
+    observacoes: string;
+  };
+  backgroundColor: string;
+  borderColor: string;
+  textColor: string;
+}
 
 export default function AgendaDjPage() {
   const { user } = useAuth();
   const router = useRouter();
   const [eventos, setEventos] = useState<Evento[]>([]);
+  const [eventosCalendario, setEventosCalendario] = useState<EventoCalendarioDJ[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<"planilha" | "calendario">("planilha");
+  const [eventoSelecionado, setEventoSelecionado] = useState<EventoCalendarioDJ | null>(null);
+  const [showModal, setShowModal] = useState(false);
+  const calendarRef = useRef<any>(null);
 
   useEffect(() => {
     const fetchEventos = async () => {
@@ -21,19 +54,16 @@ export default function AgendaDjPage() {
       try {
         if (!user?.uid) {
           console.log("[AgendaDJ] Usuário não autenticado, aguardando...");
-          // Não lança erro, apenas espera o user.uid
           return; 
         }
         
         console.log(`[AgendaDJ] Buscando eventos para DJ: ${user.uid}`);
-        // Passa o uid do usuário logado para buscar apenas seus eventos visíveis
         const eventosData = await getVisibleDjEvents(user.uid);
         console.log(`[AgendaDJ] Eventos recebidos: ${eventosData.length}`);
         setEventos(eventosData);
       } catch (error: any) {
         console.error("[AgendaDJ] Erro ao carregar eventos:", error);
         toast.error(`Erro ao carregar eventos: ${error.message || "Erro desconhecido"}`);
-        // Limpa eventos em caso de erro para não mostrar dados antigos/falsos
         setEventos([]); 
       } finally {
         setLoading(false);
@@ -43,23 +73,66 @@ export default function AgendaDjPage() {
     if (user) {
       fetchEventos();
     } else {
-      // Se o usuário ainda não carregou, define loading como true
       setLoading(true);
     }
-  }, [user]); // Dependência apenas no user
+  }, [user]);
+
+  // Converter eventos para formato do FullCalendar
+  useEffect(() => {
+    const convertedEvents = eventos.map(evento => {
+      let backgroundColor = "#4B5563"; // Cinza (padrão)
+      let borderColor = "#374151";
+      let textColor = "#FFFFFF";
+      
+      if (evento.status_pgto === "quitado") {
+        backgroundColor = "#10B981"; // Verde
+        borderColor = "#059669";
+      } else if (evento.status_pgto === "parcial") {
+        backgroundColor = "#F59E0B"; // Amarelo
+        borderColor = "#D97706";
+      } else if (evento.status_pgto === "pendente") {
+        backgroundColor = "#6B7280"; // Cinza
+        borderColor = "#4B5563";
+      } else if (evento.status_pgto === "cancelado") {
+        backgroundColor = "#EF4444"; // Vermelho
+        borderColor = "#DC2626";
+      }
+
+      const eventoCal: EventoCalendarioDJ = {
+        id: evento.id,
+        title: evento.nome_evento || "Evento sem nome",
+        start: `${evento.data}${evento.horario ? `T${evento.horario}:00` : ''}`,
+        allDay: !evento.horario,
+        extendedProps: {
+          local: evento.local || "",
+          horario: evento.horario || "",
+          valor_total: evento.valor_total || 0,
+          custos: evento.custos || evento.custos_dj || 0, // Considera ambos os campos de custo
+          status_pgto: evento.status_pgto || "pendente",
+          tipo_evento: evento.tipo_evento || "",
+          contratante_nome: evento.contratante_nome || "",
+          observacoes: evento.observacoes || ""
+        },
+        backgroundColor,
+        borderColor,
+        textColor
+      };
+      return eventoCal;
+    });
+    setEventosCalendario(convertedEvents);
+  }, [eventos]);
 
   const formatarData = (dataISO: string) => {
     if (!dataISO) return "-";
     try {
       const [ano, mes, dia] = dataISO.split("-");
-      // Validação simples
       if (!ano || !mes || !dia || ano.length !== 4 || mes.length !== 2 || dia.length !== 2) {
         throw new Error("Formato de data inválido");
       }
       return `${dia}/${mes}/${ano}`;
     } catch (error) {
       console.warn(`[AgendaDJ] Erro ao formatar data: ${dataISO}`, error);
-      return dataISO; // Retorna original em caso de erro
+      return dataISO;
     }
   };
 
@@ -67,7 +140,19 @@ export default function AgendaDjPage() {
     if (status === "quitado") return "✅";
     if (status === "parcial") return "⚠️";
     if (status === "pendente") return "🕒";
+    if (status === "cancelado") return "🚫"; // Adicionado ícone para cancelado
     return "❓";
+  };
+
+  // Função para lidar com clique em evento no calendário
+  const handleEventClick = (info: any) => {
+    setEventoSelecionado(info.event);
+    setShowModal(true);
+  };
+
+  // Função para navegar para detalhes do evento
+  const navigateToEventDetails = (eventId: string) => {
+    router.push(`/dashboard/dj/eventos/${eventId}`);
   };
 
   if (loading) {
@@ -94,7 +179,7 @@ export default function AgendaDjPage() {
                 : "bg-gray-200 text-gray-700 hover:bg-gray-300"
             }`}
           >
-            Visualização em Planilha
+            Planilha
           </button>
           <button
             onClick={() => setViewMode("calendario")}
@@ -104,11 +189,11 @@ export default function AgendaDjPage() {
                 : "bg-gray-200 text-gray-700 hover:bg-gray-300"
             }`}
           >
-            Visualização em Calendário
+            Calendário
           </button>
           <Link
             href="/dashboard/dj/create-event"
-            className="px-4 py-2 rounded-md bg-green-600 text-white hover:bg-green-700 ml-2"
+            className="px-4 py-2 rounded-md bg-green-600 text-white hover:bg-green-700 ml-auto"
           >
             Adicionar Novo Evento
           </Link>
@@ -116,6 +201,7 @@ export default function AgendaDjPage() {
       </div>
 
       {viewMode === "planilha" ? (
+        // Visualização em Planilha (código existente)
         <div className="bg-white rounded-lg shadow-md p-6">
           <h2 className="text-xl font-semibold mb-4 text-blue-700">Próximos Eventos</h2>
           {eventos.length > 0 ? (
@@ -137,13 +223,11 @@ export default function AgendaDjPage() {
                   {eventos.map((evento) => (
                     <tr key={evento.id} className="hover:bg-gray-50">
                       <td className="px-4 py-3 whitespace-nowrap text-gray-800">{formatarData(evento.data)}</td>
-                      <td className="px-4 py-3 text-gray-800">
-                        {evento.nome_evento}
-                      </td>
+                      <td className="px-4 py-3 text-gray-800">{evento.nome_evento}</td>
                       <td className="px-4 py-3 text-gray-800">{evento.local}</td>
                       <td className="px-4 py-3 text-gray-800">{evento.horario || "-"}</td>
                       <td className="px-4 py-3 text-gray-800">R$ {(evento.valor_total || 0).toFixed(2)}</td>
-                      <td className="px-4 py-3 text-gray-800 font-medium">R$ {(evento.custos || 0).toFixed(2)}</td>
+                      <td className="px-4 py-3 text-gray-800 font-medium">R$ {(evento.custos || evento.custos_dj || 0).toFixed(2)}</td>
                       <td className="px-4 py-3 text-gray-800">
                         {getStatusIcon(evento.status_pgto)} {evento.status_pgto || "Não definido"}
                       </td>
@@ -178,14 +262,64 @@ export default function AgendaDjPage() {
           )}
         </div>
       ) : (
+        // Visualização em Calendário (Implementação com FullCalendar)
         <div className="bg-white rounded-lg shadow-md p-6">
-          <h2 className="text-xl font-semibold mb-4 text-blue-700">Calendário de Eventos</h2>
-          <div className="border rounded-lg p-4 bg-gray-50 min-h-[500px] flex items-center justify-center">
-            <div className="text-center">
-              <p className="text-gray-500 mb-4">Visualização de calendário será implementada aqui.</p>
-              <p className="text-gray-500 italic">
-                Para implementação completa, será necessário instalar e configurar um componente de calendário como o FullCalendar.
-              </p>
+          <FullCalendar
+            ref={calendarRef}
+            plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
+            initialView="dayGridMonth"
+            headerToolbar={{
+              left: "prev,next today",
+              center: "title",
+              right: "dayGridMonth,timeGridWeek,timeGridDay",
+            }}
+            events={eventosCalendario}
+            locale={ptBR}
+            buttonText={{
+              today: "Hoje",
+              month: "Mês",
+              week: "Semana",
+              day: "Dia",
+            }}
+            eventClick={handleEventClick}
+            editable={false} // DJ não pode arrastar eventos
+            droppable={false}
+            selectable={false} // DJ não pode selecionar datas para criar evento rápido
+            height="auto" // Ajusta altura automaticamente
+            contentHeight="auto"
+            aspectRatio={1.8}
+          />
+        </div>
+      )}
+
+      {/* Modal de Detalhes do Evento (Simplificado) */}
+      {showModal && eventoSelecionado && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl p-6 max-w-lg w-full">
+            <h3 className="text-xl font-bold mb-4">{eventoSelecionado.title}</h3>
+            <p><strong>Data:</strong> {formatarData(eventoSelecionado.start.split('T')[0])}</p>
+            {eventoSelecionado.extendedProps.horario && <p><strong>Horário:</strong> {eventoSelecionado.extendedProps.horario}</p>}
+            <p><strong>Local:</strong> {eventoSelecionado.extendedProps.local}</p>
+            <p><strong>Valor Total:</strong> R$ {eventoSelecionado.extendedProps.valor_total.toFixed(2)}</p>
+            <p><strong>Custos:</strong> R$ {eventoSelecionado.extendedProps.custos.toFixed(2)}</p>
+            <p><strong>Status Pgto:</strong> {getStatusIcon(eventoSelecionado.extendedProps.status_pgto)} {eventoSelecionado.extendedProps.status_pgto}</p>
+            {eventoSelecionado.extendedProps.tipo_evento && <p><strong>Tipo:</strong> {eventoSelecionado.extendedProps.tipo_evento}</p>}
+            {eventoSelecionado.extendedProps.contratante_nome && <p><strong>Contratante:</strong> {eventoSelecionado.extendedProps.contratante_nome}</p>}
+            {eventoSelecionado.extendedProps.observacoes && <p><strong>Obs:</strong> {eventoSelecionado.extendedProps.observacoes}</p>}
+            
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                onClick={() => navigateToEventDetails(eventoSelecionado.id)}
+                className="btn-primary"
+              >
+                Ver Detalhes Completos
+              </button>
+              <button
+                onClick={() => setShowModal(false)}
+                className="btn-secondary"
+              >
+                Fechar
+              </button>
             </div>
           </div>
         </div>
@@ -193,3 +327,4 @@ export default function AgendaDjPage() {
     </div>
   );
 }
+
