@@ -2,6 +2,7 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useAuth } from '@/hooks/useAuth';
 import { BarChart, CalendarClock, ListChecks, Users } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 // Placeholder data for dashboard stats
 const stats = [
