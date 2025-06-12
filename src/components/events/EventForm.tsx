@@ -55,27 +55,53 @@ interface EventFormProps {
 }
 
 export default function EventForm({ event, onSubmit, onCancel, isLoading }: EventFormProps) {
+  
+  const defaultValuesForCreate = {
+    nome_evento: '',
+    local: '',
+    data_evento: undefined, // Calendar component handles undefined for its 'selected' prop
+    contratante_nome: '',
+    contratante_contato: '',
+    valor_total: 0,
+    valor_sinal: 0,
+    conta_que_recebeu: 'agencia' as 'agencia' | 'dj',
+    status_pagamento: 'pendente' as 'pendente' | 'parcial' | 'pago' | 'vencido' | 'cancelado',
+    dj_nome: '',
+    dj_id: '',
+  };
+
   const defaultValues = event
-    ? {
-        ...event,
-        data_evento: event.data_evento instanceof Timestamp ? event.data_evento.toDate() : (typeof event.data_evento === 'string' ? parseISO(event.data_evento) : event.data_evento),
-        valor_total: Number(event.valor_total),
-        valor_sinal: Number(event.valor_sinal),
+    ? { // Editing an existing event
+        ...event, // Spread first to get all existing values
+        // Override/transform specific fields as needed
+        nome_evento: event.nome_evento || '', // Ensure string, though type says it is
+        local: event.local || '', // Ensure string
+        data_evento: event.data_evento instanceof Timestamp 
+            ? event.data_evento.toDate() 
+            : (typeof event.data_evento === 'string' ? parseISO(event.data_evento) : event.data_evento),
+        contratante_nome: event.contratante_nome || '', // Ensure string
+        contratante_contato: event.contratante_contato ?? '', // Handles null from DB, converts to empty string
+        valor_total: Number(event.valor_total), // Ensure it's a number
+        valor_sinal: Number(event.valor_sinal), // Ensure it's a number
+        conta_que_recebeu: event.conta_que_recebeu || 'agencia', // Fallback if needed
+        status_pagamento: event.status_pagamento || 'pendente', // Fallback if needed
+        dj_nome: event.dj_nome || '', // Ensure string
+        dj_id: event.dj_id || '', // Ensure string
       }
-    : {
-        valor_total: 0,
-        valor_sinal: 0,
-        status_pagamento: 'pendente',
-        conta_que_recebeu: 'agencia',
-      };
+    : defaultValuesForCreate;
 
   const form = useForm<EventFormValues>({
     resolver: zodResolver(eventFormSchema),
-    defaultValues: defaultValues as any, // Zod schema has stricter date, coercion handles it
+    defaultValues: defaultValues as any, // Using 'as any' for simplicity with Date/Timestamp/enums; ensure types align
   });
 
   const handleSubmit = async (values: EventFormValues) => {
-    await onSubmit(values);
+    // If contratante_contato is an empty string but should be null in the DB:
+    const submissionValues = {
+      ...values,
+      contratante_contato: values.contratante_contato === '' ? null : values.contratante_contato,
+    };
+    await onSubmit(submissionValues);
   };
 
   return (
@@ -191,7 +217,8 @@ export default function EventForm({ event, onSubmit, onCancel, isLoading }: Even
               <FormItem>
                 <FormLabel>Contato do Contratante (Opcional)</FormLabel>
                 <FormControl>
-                  <Input placeholder="Ex: (11) 99999-9999 ou email@example.com" {...field} value={field.value ?? ''}/>
+                  {/* field.value is now guaranteed to be a string by defaultValues */}
+                  <Input placeholder="Ex: (11) 99999-9999 ou email@example.com" {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -319,3 +346,4 @@ export default function EventForm({ event, onSubmit, onCancel, isLoading }: Even
     </Form>
   );
 }
+
