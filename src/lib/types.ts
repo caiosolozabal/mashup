@@ -12,31 +12,33 @@ export interface UserDetails {
 }
 
 export interface EventFile {
-  id: string;
+  id: string; // Can be file name or a generated ID
   name: string;
   url: string; // Firebase Storage URL
   type: 'contract' | 'payment_proof_client' | 'dj_receipt' | 'other';
-  uploadedAt: Date;
+  uploadedAt: Date; // Consider storing as Timestamp or ISO string in Firestore
 }
 
 export interface Event {
   id: string;
-  data_evento: Date;
+  data_evento: Date; // Stored as Firestore Timestamp, converted to Date on client
   dia_da_semana: string;
   nome_evento: string;
   local: string;
   contratante_nome: string;
-  contratante_contato?: string | null; // Made optional
+  contratante_contato?: string | null;
   valor_total: number;
   valor_sinal: number;
   conta_que_recebeu: 'agencia' | 'dj';
   status_pagamento: 'pendente' | 'parcial' | 'pago' | 'vencido' | 'cancelado';
   dj_id: string;
   dj_nome: string;
+  dj_costs?: number | null; // Custos adicionais do DJ para este evento
+  payment_proofs?: EventFile[] | null; // Comprovantes de pagamento enviados pelo DJ
   created_by: string; // UID of user who created event
-  created_at: Date;
-  updated_at?: Date; // Added for updates
-  files?: EventFile[] | null; // Made optional
+  created_at: Date; // Stored as Firestore Timestamp
+  updated_at?: Date; // Stored as Firestore Timestamp
+  files?: EventFile[] | null; // Outros arquivos gerais do evento
 }
 
 // Represents a financial transaction, could be part of a settlement or a standalone payment

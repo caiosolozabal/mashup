@@ -69,14 +69,24 @@ const EventsPage: NextPage = () => {
       const eventsCollection = collection(db, 'events');
       const q = query(eventsCollection, orderBy('data_evento', 'desc'));
       const eventsSnapshot = await getDocs(q);
-      const eventsList = eventsSnapshot.docs.map(doc => {
-        const data = doc.data();
+      const eventsList = eventsSnapshot.docs.map(docSnapshot => {
+        const data = docSnapshot.data();
         return {
-          id: doc.id,
+          id: docSnapshot.id,
           ...data,
           data_evento: data.data_evento instanceof Timestamp ? data.data_evento.toDate() : new Date(data.data_evento),
           created_at: data.created_at instanceof Timestamp ? data.created_at.toDate() : new Date(data.created_at),
           updated_at: data.updated_at && (data.updated_at instanceof Timestamp ? data.updated_at.toDate() : new Date(data.updated_at)),
+          // Ensure payment_proofs and files are arrays even if undefined in Firestore
+          payment_proofs: Array.isArray(data.payment_proofs) ? data.payment_proofs.map(proof => ({
+            ...proof,
+            uploadedAt: proof.uploadedAt instanceof Timestamp ? proof.uploadedAt.toDate() : new Date(proof.uploadedAt)
+          })) : [],
+          files: Array.isArray(data.files) ? data.files.map(file => ({
+            ...file,
+            uploadedAt: file.uploadedAt instanceof Timestamp ? file.uploadedAt.toDate() : new Date(file.uploadedAt)
+          })) : [],
+          dj_costs: data.dj_costs ?? 0, // Default to 0 if undefined
         } as Event;
       });
       setEvents(eventsList);
@@ -123,19 +133,30 @@ const EventsPage: NextPage = () => {
     }
 
     setIsSubmitting(true);
+    // Prepare data for Firestore, converting Date to Timestamp
     const eventData = {
       ...values,
       dia_da_semana: getDayOfWeek(values.data_evento),
       data_evento: Timestamp.fromDate(values.data_evento),
       valor_total: Number(values.valor_total),
       valor_sinal: Number(values.valor_sinal),
+      dj_costs: values.dj_costs ? Number(values.dj_costs) : 0,
+      // payment_proofs and files are not handled in this submission
+      // they would be managed by separate upload functions that update the event doc
     };
+    
+    // Remove undefined fields that Zod might make optional, ensure they are not sent if not intended.
+    if (eventData.contratante_contato === undefined) delete (eventData as any).contratante_contato;
+
 
     try {
       if (selectedEvent) { // Editing
         const eventRef = doc(db, 'events', selectedEvent.id);
+        // When editing, we might only want to update specific fields
+        // and preserve arrays like payment_proofs unless explicitly changed by an upload function.
+        // For now, we spread all form values.
         await updateDoc(eventRef, {
-          ...eventData,
+          ...eventData, // This includes dj_costs
           updated_at: serverTimestamp(),
         });
         toast({ title: 'Evento atualizado!', description: `"${values.nome_evento}" foi atualizado com sucesso.` });
@@ -145,6 +166,8 @@ const EventsPage: NextPage = () => {
           created_by: user.uid,
           created_at: serverTimestamp(),
           updated_at: serverTimestamp(),
+          payment_proofs: [], // Initialize as empty array for new events
+          files: [], // Initialize as empty array for new events
         });
         toast({ title: 'Evento criado!', description: `"${values.nome_evento}" foi criado com sucesso.` });
       }
@@ -281,7 +304,7 @@ const EventsPage: NextPage = () => {
 
       {/* Event View Dialog */}
       <Dialog open={isViewOpen} onOpenChange={(open) => { setIsViewOpen(open); if (!open) setSelectedEvent(null); }}>
-        <DialogContent className="sm:max-w-xl">
+        <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto">
           <EventView event={selectedEvent} />
            <DialogFooter>
             <Button variant="outline" onClick={() => setIsViewOpen(false)}>Fechar</Button>

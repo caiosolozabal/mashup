@@ -17,13 +17,14 @@ import {
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { CalendarIcon, Loader2 } from 'lucide-react';
+import { CalendarIcon, Loader2, Paperclip, FileText, UploadCloud } from 'lucide-react';
 import { Calendar } from '@/components/ui/calendar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
-import type { Event } from '@/lib/types';
+import type { Event, EventFile } from '@/lib/types';
 import { Timestamp } from 'firebase/firestore';
+import { Separator } from '@/components/ui/separator';
 
 const getDayOfWeek = (date: Date | undefined): string => {
   if (!date) return '';
@@ -43,6 +44,8 @@ const eventFormSchema = z.object({
   status_pagamento: z.enum(['pendente', 'parcial', 'pago', 'vencido', 'cancelado'], { required_error: 'Status do pagamento é obrigatório.' }),
   dj_nome: z.string().min(2, { message: 'Nome do DJ é obrigatório.' }),
   dj_id: z.string().min(1, { message: 'ID do DJ é obrigatório (pode ser um placeholder por enquanto).' }),
+  dj_costs: z.coerce.number().min(0, { message: 'Custos do DJ não podem ser negativos.' }).default(0).optional(),
+  // payment_proofs will be handled separately, not directly part of the Zod schema for form data submission in this iteration
 });
 
 export type EventFormValues = z.infer<typeof eventFormSchema>;
@@ -56,50 +59,51 @@ interface EventFormProps {
 
 export default function EventForm({ event, onSubmit, onCancel, isLoading }: EventFormProps) {
   
-  const defaultValuesForCreate = {
+  const defaultValuesForCreate: EventFormValues = {
     nome_evento: '',
     local: '',
-    data_evento: undefined, // Calendar component handles undefined for its 'selected' prop
+    data_evento: undefined as any, // Calendar component handles undefined
     contratante_nome: '',
     contratante_contato: '',
     valor_total: 0,
     valor_sinal: 0,
-    conta_que_recebeu: 'agencia' as 'agencia' | 'dj',
-    status_pagamento: 'pendente' as 'pendente' | 'parcial' | 'pago' | 'vencido' | 'cancelado',
+    conta_que_recebeu: 'agencia',
+    status_pagamento: 'pendente',
     dj_nome: '',
     dj_id: '',
+    dj_costs: 0,
   };
 
   const defaultValues = event
-    ? { // Editing an existing event
-        ...event, // Spread first to get all existing values
-        // Override/transform specific fields as needed
-        nome_evento: event.nome_evento || '', // Ensure string, though type says it is
-        local: event.local || '', // Ensure string
+    ? {
+        ...event,
+        nome_evento: event.nome_evento || '',
+        local: event.local || '',
         data_evento: event.data_evento instanceof Timestamp 
             ? event.data_evento.toDate() 
             : (typeof event.data_evento === 'string' ? parseISO(event.data_evento) : event.data_evento),
-        contratante_nome: event.contratante_nome || '', // Ensure string
-        contratante_contato: event.contratante_contato ?? '', // Handles null from DB, converts to empty string
-        valor_total: Number(event.valor_total), // Ensure it's a number
-        valor_sinal: Number(event.valor_sinal), // Ensure it's a number
-        conta_que_recebeu: event.conta_que_recebeu || 'agencia', // Fallback if needed
-        status_pagamento: event.status_pagamento || 'pendente', // Fallback if needed
-        dj_nome: event.dj_nome || '', // Ensure string
-        dj_id: event.dj_id || '', // Ensure string
+        contratante_nome: event.contratante_nome || '',
+        contratante_contato: event.contratante_contato ?? '',
+        valor_total: Number(event.valor_total),
+        valor_sinal: Number(event.valor_sinal),
+        conta_que_recebeu: event.conta_que_recebeu || 'agencia',
+        status_pagamento: event.status_pagamento || 'pendente',
+        dj_nome: event.dj_nome || '',
+        dj_id: event.dj_id || '',
+        dj_costs: event.dj_costs ? Number(event.dj_costs) : 0,
       }
     : defaultValuesForCreate;
 
   const form = useForm<EventFormValues>({
     resolver: zodResolver(eventFormSchema),
-    defaultValues: defaultValues as any, // Using 'as any' for simplicity with Date/Timestamp/enums; ensure types align
+    defaultValues,
   });
 
   const handleSubmit = async (values: EventFormValues) => {
-    // If contratante_contato is an empty string but should be null in the DB:
     const submissionValues = {
       ...values,
       contratante_contato: values.contratante_contato === '' ? null : values.contratante_contato,
+      dj_costs: values.dj_costs ? Number(values.dj_costs) : 0,
     };
     await onSubmit(submissionValues);
   };
@@ -167,13 +171,13 @@ export default function EventForm({ event, onSubmit, onCancel, isLoading }: Even
                     selected={field.value}
                     onSelect={(date) => {
                       if (date) {
-                        const currentHour = field.value?.getHours() ?? 19; // Default to 7 PM or current hour
+                        const currentHour = field.value?.getHours() ?? 19;
                         const currentMinutes = field.value?.getMinutes() ?? 0;
                         date.setHours(currentHour, currentMinutes);
                       }
                       field.onChange(date);
                     }}
-                    disabled={(date) => date < new Date(new Date().setDate(new Date().getDate() -1 )) } // Disable past dates
+                    disabled={(date) => date < new Date(new Date().setDate(new Date().getDate() -1 )) }
                     initialFocus
                   />
                   <div className="p-2 border-t border-border">
@@ -217,8 +221,7 @@ export default function EventForm({ event, onSubmit, onCancel, isLoading }: Even
               <FormItem>
                 <FormLabel>Contato do Contratante (Opcional)</FormLabel>
                 <FormControl>
-                  {/* field.value is now guaranteed to be a string by defaultValues */}
-                  <Input placeholder="Ex: (11) 99999-9999 ou email@example.com" {...field} />
+                  <Input placeholder="Ex: (11) 99999-9999 ou email@example.com" {...field} value={field.value ?? ''} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -226,7 +229,7 @@ export default function EventForm({ event, onSubmit, onCancel, isLoading }: Even
           />
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <FormField
             control={form.control}
             name="valor_total"
@@ -249,6 +252,20 @@ export default function EventForm({ event, onSubmit, onCancel, isLoading }: Even
                 <FormControl>
                   <Input type="number" step="0.01" placeholder="Ex: 500.00" {...field} />
                 </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="dj_costs"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Custos do DJ (R$)</FormLabel>
+                <FormControl>
+                  <Input type="number" step="0.01" placeholder="Ex: 100.00" {...field} />
+                </FormControl>
+                <FormDescription>Custos como transporte, etc.</FormDescription>
                 <FormMessage />
               </FormItem>
             )}
@@ -333,6 +350,45 @@ export default function EventForm({ event, onSubmit, onCancel, isLoading }: Even
           />
         </div>
 
+        <Separator />
+
+        <div>
+          <h3 className="text-lg font-medium mb-2">Comprovantes de Pagamento do DJ</h3>
+          {event?.payment_proofs && event.payment_proofs.length > 0 ? (
+            <ul className="space-y-2 mb-3">
+              {event.payment_proofs.map((proof, index) => (
+                <li key={proof.id || index} className="flex items-center justify-between p-2 border rounded-md">
+                  <div className="flex items-center space-x-2">
+                    <FileText className="h-5 w-5 text-muted-foreground" />
+                    <a href={proof.url} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline">
+                      {proof.name}
+                    </a>
+                    <span className="text-xs text-muted-foreground">({format(new Date(proof.uploadedAt), 'dd/MM/yy')})</span>
+                  </div>
+                  {/* TODO: Add delete button for proofs - requires backend logic */}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-muted-foreground mb-3">Nenhum comprovante enviado ainda.</p>
+          )}
+          <FormItem>
+            <FormLabel htmlFor="payment-proof-upload">Enviar Novo Comprovante</FormLabel>
+            <div className="flex items-center gap-2">
+              <FormControl>
+                <Input id="payment-proof-upload" type="file" className="flex-grow" disabled /> 
+                {/* Actual upload logic to be implemented later */}
+              </FormControl>
+              <Button type="button" variant="outline" disabled> {/* Make functional later */}
+                <UploadCloud className="mr-2 h-4 w-4" />
+                Upload
+              </Button>
+            </div>
+            <FormDescription>Selecione o arquivo do comprovante (PDF, JPG, PNG). O upload será implementado em breve.</FormDescription>
+          </FormItem>
+        </div>
+
+
         <div className="flex justify-end space-x-2 pt-4">
           <Button type="button" variant="outline" onClick={onCancel} disabled={isLoading}>
             Cancelar
@@ -346,4 +402,3 @@ export default function EventForm({ event, onSubmit, onCancel, isLoading }: Even
     </Form>
   );
 }
-

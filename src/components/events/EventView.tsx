@@ -7,6 +7,8 @@ import { Badge, badgeVariants } from '@/components/ui/badge';
 import { format } from 'date-fns';
 import type { VariantProps } from 'class-variance-authority';
 import { Timestamp } from 'firebase/firestore';
+import { FileText, Link as LinkIcon } from 'lucide-react';
+import { Separator } from '@/components/ui/separator';
 
 const getStatusVariant = (status?: Event['status_pagamento']): VariantProps<typeof badgeVariants>['variant'] => {
   switch (status) {
@@ -40,6 +42,9 @@ export default function EventView({ event }: EventViewProps) {
   }
 
   const eventDate = event.data_evento instanceof Timestamp ? event.data_evento.toDate() : (typeof event.data_evento === 'string' ? new Date(event.data_evento) : event.data_evento);
+  const createdAtDate = event.created_at instanceof Timestamp ? event.created_at.toDate() : (typeof event.created_at === 'string' ? new Date(event.created_at) : event.created_at);
+  const updatedAtDate = event.updated_at ? (event.updated_at instanceof Timestamp ? event.updated_at.toDate() : (typeof event.updated_at === 'string' ? new Date(event.updated_at) : event.updated_at)) : null;
+
 
   return (
     <Card className="shadow-none border-0">
@@ -59,17 +64,23 @@ export default function EventView({ event }: EventViewProps) {
           <h4 className="font-semibold text-sm mb-1">DJ:</h4>
           <p className="text-muted-foreground">{event.dj_nome} (ID: {event.dj_id})</p>
         </div>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
           <div>
             <h4 className="font-semibold text-sm mb-1">Valor Total:</h4>
             <p className="text-muted-foreground">
-              {event.valor_total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+              {Number(event.valor_total).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
             </p>
           </div>
           <div>
             <h4 className="font-semibold text-sm mb-1">Valor Sinal:</h4>
             <p className="text-muted-foreground">
-              {event.valor_sinal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+              {Number(event.valor_sinal).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+            </p>
+          </div>
+           <div>
+            <h4 className="font-semibold text-sm mb-1">Custos do DJ:</h4>
+            <p className="text-muted-foreground">
+              {Number(event.dj_costs || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
             </p>
           </div>
         </div>
@@ -88,23 +99,53 @@ export default function EventView({ event }: EventViewProps) {
           </div>
         </div>
         
-        {event.created_at && (
-            <div>
-                <h4 className="font-semibold text-sm mb-1">Criado em:</h4>
-                <p className="text-xs text-muted-foreground">
-                    {format(event.created_at instanceof Timestamp ? event.created_at.toDate() : new Date(event.created_at), 'dd/MM/yyyy HH:mm')}
-                </p>
-            </div>
-        )}
-        {event.updated_at && (
-             <div>
-                <h4 className="font-semibold text-sm mb-1">Última Atualização:</h4>
-                <p className="text-xs text-muted-foreground">
-                    {format(event.updated_at instanceof Timestamp ? event.updated_at.toDate() : new Date(event.updated_at), 'dd/MM/yyyy HH:mm')}
-                </p>
-            </div>
-        )}
-        {/* TODO: Display files if any */}
+        <Separator />
+
+        <div>
+          <h4 className="font-semibold text-sm mb-2">Comprovantes de Pagamento do DJ:</h4>
+          {event.payment_proofs && event.payment_proofs.length > 0 ? (
+            <ul className="space-y-2">
+              {event.payment_proofs.map((proof, index) => (
+                <li key={proof.id || index} className="flex items-center space-x-2 p-1.5 bg-secondary/30 rounded-md">
+                  <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                  <a 
+                    href={proof.url} 
+                    target="_blank" 
+                    rel="noopener noreferrer" 
+                    className="text-xs text-primary hover:underline truncate"
+                    title={proof.name}
+                  >
+                    {proof.name}
+                  </a>
+                  <span className="text-xs text-muted-foreground ml-auto">
+                    ({format(proof.uploadedAt instanceof Timestamp ? proof.uploadedAt.toDate() : new Date(proof.uploadedAt), 'dd/MM/yy')})
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-xs text-muted-foreground">Nenhum comprovante de pagamento enviado pelo DJ.</p>
+          )}
+        </div>
+
+        {/* TODO: Display general event files (event.files) similarly if needed */}
+        
+        <Separator />
+
+        <div className="grid grid-cols-2 gap-4 text-xs text-muted-foreground">
+            {createdAtDate && (
+                <div>
+                    <h4 className="font-semibold text-sm mb-1">Criado em:</h4>
+                    <p>{format(createdAtDate, 'dd/MM/yyyy HH:mm')}</p>
+                </div>
+            )}
+            {updatedAtDate && (
+                <div>
+                    <h4 className="font-semibold text-sm mb-1">Última Atualização:</h4>
+                    <p>{format(updatedAtDate, 'dd/MM/yyyy HH:mm')}</p>
+                </div>
+            )}
+        </div>
       </CardContent>
     </Card>
   );
