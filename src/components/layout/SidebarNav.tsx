@@ -75,9 +75,8 @@ export default function SidebarNav() {
     <SidebarMenu>
       {navItems.filter(item => canView(item.roles)).map((item) => (
         <SidebarMenuItem key={item.href}>
-          <Link href={item.href} passHref legacyBehavior>
+          <Link href={item.href}>
             <SidebarMenuButton
-              as="a" // Ensure it behaves like an anchor for NextLink
               isActive={pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href))}
               tooltip={{ children: item.label, side: 'right', align: 'center' }}
               aria-label={item.label}
@@ -91,3 +90,4 @@ export default function SidebarNav() {
     </SidebarMenu>
   );
 }
+
