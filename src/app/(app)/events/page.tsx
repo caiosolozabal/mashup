@@ -302,6 +302,9 @@ const EventsPage: NextPage = () => {
 
       <Dialog open={isViewOpen} onOpenChange={(open) => { setIsViewOpen(open); if (!open) setSelectedEvent(null); }}>
         <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Detalhes do Evento: {selectedEvent?.nome_evento}</DialogTitle>
+          </DialogHeader>
           <EventView event={selectedEvent} />
            <DialogFooter>
             <Button variant="outline" onClick={() => setIsViewOpen(false)}>Fechar</Button>
@@ -336,3 +339,5 @@ const EventsPage: NextPage = () => {
 };
 
 export default EventsPage;
+
+    
