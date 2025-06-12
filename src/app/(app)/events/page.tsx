@@ -7,105 +7,29 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge, badgeVariants } from '@/components/ui/badge';
 import type { Event } from '@/lib/types';
-import { format } from 'date-fns';
-import { PlusCircle, Eye, Edit, Trash2 } from 'lucide-react';
+import { format, parseISO } from 'date-fns';
+import { PlusCircle, Eye, Edit, Trash2, Loader2 } from 'lucide-react';
 import type { VariantProps } from 'class-variance-authority';
+import { useEffect, useState } from 'react';
+import { db, auth } from '@/lib/firebase';
+import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc, Timestamp, serverTimestamp, query, orderBy } from 'firebase/firestore';
+import { useToast } from '@/hooks/use-toast';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import EventForm, { type EventFormValues } from '@/components/events/EventForm';
+import EventView from '@/components/events/EventView';
+import { useAuth } from '@/hooks/useAuth';
 
-const getDayOfWeek = (date: Date): string => {
+
+const getDayOfWeek = (date: Date | undefined): string => {
+  if (!date) return '';
   const days = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
   return days[date.getDay()];
 };
 
-// Mock data - TODO: Replace with actual data fetching from Firestore
-const mockEvents: Event[] = [
-  {
-    id: '1',
-    data_evento: new Date('2024-08-15T19:00:00'),
-    dia_da_semana: getDayOfWeek(new Date('2024-08-15T19:00:00')),
-    nome_evento: 'Summer Fest',
-    local: 'Beach Club',
-    contratante_nome: 'John Doe Productions',
-    contratante_contato: 'john@productions.com',
-    valor_total: 5000,
-    valor_sinal: 2000,
-    conta_que_recebeu: 'agencia',
-    status_pagamento: 'parcial',
-    dj_id: 'dj_alpha_uid',
-    dj_nome: 'DJ Alpha',
-    created_by: 'admin_uid',
-    created_at: new Date(),
-    files: [{ id: 'f1', name: 'Contract SF.pdf', type: 'contract', url: '#', uploadedAt: new Date() }],
-  },
-  {
-    id: '2',
-    data_evento: new Date('2024-09-01T22:00:00'),
-    dia_da_semana: getDayOfWeek(new Date('2024-09-01T22:00:00')),
-    nome_evento: 'Tech Night',
-    local: 'Warehouse X',
-    contratante_nome: 'Underground Events Co.',
-    valor_total: 3000,
-    valor_sinal: 3000,
-    conta_que_recebeu: 'dj',
-    status_pagamento: 'pago',
-    dj_id: 'dj_gamma_uid',
-    dj_nome: 'DJ Gamma',
-    created_by: 'partner_uid',
-    created_at: new Date(),
-  },
-  {
-    id: '3',
-    data_evento: new Date('2024-09-10T14:00:00'),
-    dia_da_semana: getDayOfWeek(new Date('2024-09-10T14:00:00')),
-    nome_evento: 'Corporate Mixer',
-    local: 'Grand Hotel Ballroom',
-    contratante_nome: 'Innovate Corp',
-    contratante_contato: 'contact@innovate.com',
-    valor_total: 2500,
-    valor_sinal: 0,
-    conta_que_recebeu: 'agencia',
-    status_pagamento: 'pendente',
-    dj_id: 'dj_epsilon_uid',
-    dj_nome: 'DJ Epsilon',
-    created_by: 'admin_uid',
-    created_at: new Date(),
-  },
-  {
-    id: '4',
-    data_evento: new Date('2024-09-20T23:00:00'),
-    dia_da_semana: getDayOfWeek(new Date('2024-09-20T23:00:00')),
-    nome_evento: 'Birthday Bash',
-    local: 'Private Residence',
-    contratante_nome: 'Jane Smith',
-    valor_total: 1500,
-    valor_sinal: 500,
-    conta_que_recebeu: 'agencia',
-    status_pagamento: 'vencido',
-    dj_id: 'dj_zeta_uid',
-    dj_nome: 'DJ Zeta',
-    created_by: 'dj_zeta_uid',
-    created_at: new Date(),
-  },
-  {
-    id: '5',
-    data_evento: new Date('2024-10-05T20:00:00'),
-    dia_da_semana: getDayOfWeek(new Date('2024-10-05T20:00:00')),
-    nome_evento: 'Sunset Vibes',
-    local: 'Rooftop Lounge',
-    contratante_nome: 'Eve Entertainment',
-    valor_total: 4000,
-    valor_sinal: 1000,
-    conta_que_recebeu: 'dj',
-    status_pagamento: 'cancelado',
-    dj_id: 'dj_beta_uid',
-    dj_nome: 'DJ Beta',
-    created_by: 'partner_uid',
-    created_at: new Date(),
-  },
-];
-
-const getStatusVariant = (status: Event['status_pagamento']): VariantProps<typeof badgeVariants>['variant'] => {
+const getStatusVariant = (status?: Event['status_pagamento']): VariantProps<typeof badgeVariants>['variant'] => {
   switch (status) {
-    case 'pago': return 'default'; 
+    case 'pago': return 'default';
     case 'parcial': return 'secondary';
     case 'pendente': return 'outline';
     case 'vencido': return 'destructive';
@@ -114,28 +38,145 @@ const getStatusVariant = (status: Event['status_pagamento']): VariantProps<typeo
   }
 };
 
-const getStatusText = (status: Event['status_pagamento']): string => {
+const getStatusText = (status?: Event['status_pagamento']): string => {
   switch (status) {
     case 'pago': return 'Pago';
     case 'parcial': return 'Parcial';
     case 'pendente': return 'Pendente';
     case 'vencido': return 'Vencido';
     case 'cancelado': return 'Cancelado';
-    default: return status;
+    default: return status || 'N/A';
   }
 };
 
 const EventsPage: NextPage = () => {
-  // TODO: Implement create event functionality (e.g., open a modal or navigate to a new page)
-  const handleCreateEvent = () => {
-    console.log('Create new event clicked');
-    // For now, just a log. Later, this will open a form/modal.
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const [events, setEvents] = useState<Event[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [isViewOpen, setIsViewOpen] = useState(false);
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+  
+  const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
+
+  const fetchEvents = async () => {
+    setIsLoading(true);
+    try {
+      if (!db) throw new Error("Firestore not initialized");
+      const eventsCollection = collection(db, 'events');
+      const q = query(eventsCollection, orderBy('data_evento', 'desc'));
+      const eventsSnapshot = await getDocs(q);
+      const eventsList = eventsSnapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          ...data,
+          data_evento: data.data_evento instanceof Timestamp ? data.data_evento.toDate() : new Date(data.data_evento),
+          created_at: data.created_at instanceof Timestamp ? data.created_at.toDate() : new Date(data.created_at),
+          updated_at: data.updated_at && (data.updated_at instanceof Timestamp ? data.updated_at.toDate() : new Date(data.updated_at)),
+        } as Event;
+      });
+      setEvents(eventsList);
+    } catch (error) {
+      console.error("Error fetching events: ", error);
+      toast({ variant: 'destructive', title: 'Erro ao buscar eventos', description: (error as Error).message });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  // TODO: Implement view, edit, delete event functionality
-  // const handleViewEvent = (eventId: string) => console.log('View event:', eventId);
-  // const handleEditEvent = (eventId: string) => console.log('Edit event:', eventId);
-  // const handleDeleteEvent = (eventId: string) => console.log('Delete event:', eventId);
+  useEffect(() => {
+    fetchEvents();
+  }, []);
+
+  const handleOpenCreateForm = () => {
+    setSelectedEvent(null);
+    setIsFormOpen(true);
+  };
+
+  const handleOpenEditForm = (event: Event) => {
+    setSelectedEvent(event);
+    setIsFormOpen(true);
+  };
+
+  const handleOpenView = (event: Event) => {
+    setSelectedEvent(event);
+    setIsViewOpen(true);
+  };
+  
+  const handleOpenDeleteConfirm = (event: Event) => {
+    setSelectedEvent(event);
+    setIsDeleteConfirmOpen(true);
+  };
+
+  const handleFormSubmit = async (values: EventFormValues) => {
+    if (!user) {
+      toast({ variant: 'destructive', title: 'Erro de autenticação', description: 'Você precisa estar logado.' });
+      return;
+    }
+    if (!db) {
+      toast({ variant: 'destructive', title: 'Erro de banco de dados', description: 'Firestore não inicializado.' });
+      return;
+    }
+
+    setIsSubmitting(true);
+    const eventData = {
+      ...values,
+      dia_da_semana: getDayOfWeek(values.data_evento),
+      data_evento: Timestamp.fromDate(values.data_evento),
+      valor_total: Number(values.valor_total),
+      valor_sinal: Number(values.valor_sinal),
+    };
+
+    try {
+      if (selectedEvent) { // Editing
+        const eventRef = doc(db, 'events', selectedEvent.id);
+        await updateDoc(eventRef, {
+          ...eventData,
+          updated_at: serverTimestamp(),
+        });
+        toast({ title: 'Evento atualizado!', description: `"${values.nome_evento}" foi atualizado com sucesso.` });
+      } else { // Creating
+        await addDoc(collection(db, 'events'), {
+          ...eventData,
+          created_by: user.uid,
+          created_at: serverTimestamp(),
+          updated_at: serverTimestamp(),
+        });
+        toast({ title: 'Evento criado!', description: `"${values.nome_evento}" foi criado com sucesso.` });
+      }
+      setIsFormOpen(false);
+      fetchEvents(); // Refresh list
+    } catch (error) {
+      console.error("Error saving event: ", error);
+      toast({ variant: 'destructive', title: 'Erro ao salvar evento', description: (error as Error).message });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDeleteEvent = async () => {
+    if (!selectedEvent || !db) {
+      toast({ variant: 'destructive', title: 'Erro', description: 'Evento não selecionado ou Firestore não disponível.' });
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      await deleteDoc(doc(db, 'events', selectedEvent.id));
+      toast({ title: 'Evento excluído!', description: `"${selectedEvent.nome_evento}" foi excluído com sucesso.` });
+      fetchEvents(); // Refresh list
+      setIsDeleteConfirmOpen(false);
+      setSelectedEvent(null);
+    } catch (error) {
+      console.error("Error deleting event: ", error);
+      toast({ variant: 'destructive', title: 'Erro ao excluir evento', description: (error as Error).message });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
 
   return (
@@ -147,13 +188,18 @@ const EventsPage: NextPage = () => {
             <CardDescription>Visualize, crie e edite os eventos da agência.</CardDescription>
           </div>
           {/* TODO: Add role check for displaying this button (admin/partner) */}
-          <Button onClick={handleCreateEvent} className="ml-auto bg-primary hover:bg-primary/90 text-primary-foreground">
+          <Button onClick={handleOpenCreateForm} className="ml-auto bg-primary hover:bg-primary/90 text-primary-foreground">
             <PlusCircle className="mr-2 h-5 w-5" />
             Novo Evento
           </Button>
         </CardHeader>
         <CardContent>
-          {mockEvents.length === 0 ? (
+          {isLoading ? (
+             <div className="flex justify-center items-center py-8">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <p className="ml-2">Carregando eventos...</p>
+             </div>
+          ) : events.length === 0 ? (
             <p className="text-muted-foreground text-center py-8">Nenhum evento encontrado.</p>
           ) : (
             <div className="overflow-x-auto">
@@ -172,8 +218,8 @@ const EventsPage: NextPage = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {mockEvents.map((event) => (
-                    <TableRow key={event.id}>
+                  {events.map((event) => (
+                    <TableRow key={event.id} onClick={() => handleOpenView(event)} className="cursor-pointer">
                       <TableCell>
                         <div className="font-medium">{format(event.data_evento, 'dd/MM/yyyy')}</div>
                         <div className="text-xs text-muted-foreground">{event.dia_da_semana}</div>
@@ -183,26 +229,26 @@ const EventsPage: NextPage = () => {
                       <TableCell>{event.local}</TableCell>
                       <TableCell>{event.contratante_nome}</TableCell>
                       <TableCell>
-                        {event.valor_total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                        {Number(event.valor_total).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                       </TableCell>
                        <TableCell className="capitalize">
                         {event.conta_que_recebeu === 'agencia' ? 'Agência' : 'DJ'}
                       </TableCell>
                       <TableCell>
-                        <Badge variant={getStatusVariant(event.status_pagamento)} className="capitalize">
+                        <Badge variant={getStatusVariant(event.status_pagamento)} className="capitalize text-xs">
                           {getStatusText(event.status_pagamento)}
                         </Badge>
                       </TableCell>
                       <TableCell>{event.dj_nome}</TableCell>
-                      <TableCell className="text-right space-x-1">
-                        <Button variant="outline" size="icon" aria-label="Visualizar Evento">
+                      <TableCell className="text-right space-x-1" onClick={(e) => e.stopPropagation()}>
+                        <Button variant="outline" size="icon" aria-label="Visualizar Evento" onClick={() => handleOpenView(event)}>
                           <Eye className="h-4 w-4" />
                         </Button>
                         {/* TODO: Add role check for edit/delete */}
-                        <Button variant="outline" size="icon" aria-label="Editar Evento">
+                        <Button variant="outline" size="icon" aria-label="Editar Evento" onClick={() => handleOpenEditForm(event)}>
                           <Edit className="h-4 w-4" />
                         </Button>
-                        <Button variant="destructive" size="icon" aria-label="Excluir Evento">
+                        <Button variant="destructive" size="icon" aria-label="Excluir Evento" onClick={() => handleOpenDeleteConfirm(event)}>
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       </TableCell>
@@ -214,9 +260,58 @@ const EventsPage: NextPage = () => {
           )}
         </CardContent>
       </Card>
-      {/* TODO: Add pagination if many events */}
-      {/* TODO: Add filtering and sorting options */}
-      {/* TODO: Implement modals/pages for Create/Edit/View Event */}
+
+      {/* Event Form Dialog */}
+      <Dialog open={isFormOpen} onOpenChange={(open) => { setIsFormOpen(open); if (!open) setSelectedEvent(null); }}>
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="font-headline">{selectedEvent ? 'Editar Evento' : 'Criar Novo Evento'}</DialogTitle>
+            <DialogDescription>
+              {selectedEvent ? 'Atualize os detalhes do evento.' : 'Preencha as informações para criar um novo evento.'}
+            </DialogDescription>
+          </DialogHeader>
+          <EventForm
+            event={selectedEvent}
+            onSubmit={handleFormSubmit}
+            onCancel={() => { setIsFormOpen(false); setSelectedEvent(null); }}
+            isLoading={isSubmitting}
+          />
+        </DialogContent>
+      </Dialog>
+
+      {/* Event View Dialog */}
+      <Dialog open={isViewOpen} onOpenChange={(open) => { setIsViewOpen(open); if (!open) setSelectedEvent(null); }}>
+        <DialogContent className="sm:max-w-xl">
+          <EventView event={selectedEvent} />
+           <DialogFooter>
+            <Button variant="outline" onClick={() => setIsViewOpen(false)}>Fechar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={isDeleteConfirmOpen} onOpenChange={setIsDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir o evento "{selectedEvent?.nome_evento}"? Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setSelectedEvent(null)} disabled={isSubmitting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteEvent}
+              disabled={isSubmitting}
+              className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+            >
+              {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
     </div>
   );
 };

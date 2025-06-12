@@ -21,21 +21,22 @@ export interface EventFile {
 
 export interface Event {
   id: string;
-  data_evento: Date; 
-  dia_da_semana: string; 
+  data_evento: Date;
+  dia_da_semana: string;
   nome_evento: string;
   local: string;
   contratante_nome: string;
-  contratante_contato?: string;
+  contratante_contato?: string | null; // Made optional
   valor_total: number;
   valor_sinal: number;
   conta_que_recebeu: 'agencia' | 'dj';
   status_pagamento: 'pendente' | 'parcial' | 'pago' | 'vencido' | 'cancelado';
-  dj_id: string; 
-  dj_nome: string; 
-  created_by: string; 
-  created_at: Date; 
-  files?: EventFile[];
+  dj_id: string;
+  dj_nome: string;
+  created_by: string; // UID of user who created event
+  created_at: Date;
+  updated_at?: Date; // Added for updates
+  files?: EventFile[] | null; // Made optional
 }
 
 // Represents a financial transaction, could be part of a settlement or a standalone payment
