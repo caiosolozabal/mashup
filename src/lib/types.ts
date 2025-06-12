@@ -11,11 +11,6 @@ export interface UserDetails {
   // other app-specific user fields
 }
 
-export interface EventClient {
-  name: string;
-  contact?: string; // e.g., phone or email
-}
-
 export interface EventFile {
   id: string;
   name: string;
@@ -26,25 +21,26 @@ export interface EventFile {
 
 export interface Event {
   id: string;
-  date: Date; // or Timestamp for Firestore
-  name: string;
-  venue: string;
-  client: EventClient;
-  totalValue: number;
-  downPayment: number; // Sinal pago pelo cliente
-  paymentStatus: 'pending' | 'partial' | 'paid' | 'overdue' | 'cancelled'; // Status do pagamento do cliente
-  // accountReceived: string; // Bank account identifier or name where client's payment was made - OLD
-  accountReceived: 'agency' | 'dj_account'; // Where the client's payment was received
-  assignedDJs: string[]; // Array of DJ UIDs
+  data_evento: Date; 
+  dia_da_semana: string; 
+  nome_evento: string;
+  local: string;
+  contratante_nome: string;
+  contratante_contato?: string;
+  valor_total: number;
+  valor_sinal: number;
+  conta_que_recebeu: 'agencia' | 'dj';
+  status_pagamento: 'pendente' | 'parcial' | 'pago' | 'vencido' | 'cancelado';
+  dj_id: string; 
+  dj_nome: string; 
+  created_by: string; 
+  created_at: Date; 
   files?: EventFile[];
-  notes?: string;
-  createdAt: Date; // or Timestamp
-  updatedAt: Date; // or Timestamp
 }
 
 // Represents a financial transaction, could be part of a settlement or a standalone payment
 export interface FinancialTransaction {
-  id: string;
+  id:string;
   eventId?: string; // Optional, if transaction is linked to a specific event
   settlementId?: string; // Optional, if part of a settlement
   djId: string;
