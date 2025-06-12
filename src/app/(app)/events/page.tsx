@@ -11,33 +11,33 @@ import { format } from 'date-fns';
 import { PlusCircle, Eye, Edit, Trash2 } from 'lucide-react';
 import type { VariantProps } from 'class-variance-authority';
 
-// Mock data -
-// TODO: Replace with actual data fetching from Firestore
+// Mock data - TODO: Replace with actual data fetching from Firestore
 const mockEvents: Event[] = [
   {
     id: '1',
     date: new Date('2024-08-15T19:00:00'),
     name: 'Summer Fest',
     venue: 'Beach Club',
-    client: 'John Doe Productions',
+    client: { name: 'John Doe Productions', contact: 'john@productions.com' },
     totalValue: 5000,
     downPayment: 2000,
     paymentStatus: 'partial',
-    accountReceived: 'Agency Account',
+    accountReceived: 'agency',
     assignedDJs: ['DJ Alpha', 'DJ Beta'],
     createdAt: new Date(),
     updatedAt: new Date(),
+    files: [{ id: 'f1', name: 'Contract SF.pdf', type: 'contract', url: '#', uploadedAt: new Date() }],
   },
   {
     id: '2',
     date: new Date('2024-09-01T22:00:00'),
     name: 'Tech Night',
     venue: 'Warehouse X',
-    client: 'Underground Events Co.',
+    client: { name: 'Underground Events Co.' },
     totalValue: 3000,
     downPayment: 3000,
     paymentStatus: 'paid',
-    accountReceived: 'DJ Gamma Account',
+    accountReceived: 'dj_account',
     assignedDJs: ['DJ Gamma'],
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -47,11 +47,11 @@ const mockEvents: Event[] = [
     date: new Date('2024-09-10T14:00:00'),
     name: 'Corporate Mixer',
     venue: 'Grand Hotel Ballroom',
-    client: 'Innovate Corp',
+    client: { name: 'Innovate Corp', contact: 'contact@innovate.com' },
     totalValue: 2500,
     downPayment: 0,
     paymentStatus: 'pending',
-    accountReceived: 'Agency Account',
+    accountReceived: 'agency',
     assignedDJs: ['DJ Epsilon'],
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -61,11 +61,11 @@ const mockEvents: Event[] = [
     date: new Date('2024-09-20T23:00:00'),
     name: 'Birthday Bash',
     venue: 'Private Residence',
-    client: 'Jane Smith',
+    client: { name: 'Jane Smith' },
     totalValue: 1500,
     downPayment: 500,
     paymentStatus: 'overdue',
-    accountReceived: 'Agency Account',
+    accountReceived: 'agency',
     assignedDJs: ['DJ Zeta'],
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -74,10 +74,11 @@ const mockEvents: Event[] = [
 
 const getStatusVariant = (status: Event['paymentStatus']): VariantProps<typeof badgeVariants>['variant'] => {
   switch (status) {
-    case 'paid': return 'default'; // Default is primary, often used for success
+    case 'paid': return 'default'; 
     case 'partial': return 'secondary';
     case 'pending': return 'outline';
     case 'overdue': return 'destructive';
+    case 'cancelled': return 'destructive'; // Example if added
     default: return 'outline';
   }
 };
@@ -89,6 +90,12 @@ const EventsPage: NextPage = () => {
     // For now, just a log. Later, this will open a form/modal.
   };
 
+  // TODO: Implement view, edit, delete event functionality
+  // const handleViewEvent = (eventId: string) => console.log('View event:', eventId);
+  // const handleEditEvent = (eventId: string) => console.log('Edit event:', eventId);
+  // const handleDeleteEvent = (eventId: string) => console.log('Delete event:', eventId);
+
+
   return (
     <div className="space-y-8">
       <Card className="shadow-lg">
@@ -97,6 +104,7 @@ const EventsPage: NextPage = () => {
             <CardTitle className="font-headline text-2xl">Gerenciar Eventos</CardTitle>
             <CardDescription>Visualize, crie e edite os eventos da agência.</CardDescription>
           </div>
+          {/* TODO: Add role check for displaying this button (admin/partner) */}
           <Button onClick={handleCreateEvent} className="ml-auto bg-primary hover:bg-primary/90 text-primary-foreground">
             <PlusCircle className="mr-2 h-5 w-5" />
             Novo Evento
@@ -114,8 +122,10 @@ const EventsPage: NextPage = () => {
                     <TableHead>Evento</TableHead>
                     <TableHead>Local</TableHead>
                     <TableHead>Cliente</TableHead>
-                    <TableHead>DJs</TableHead>
+                    <TableHead>Valor Total</TableHead>
+                    <TableHead>Recebido Em</TableHead>
                     <TableHead>Status Pag.</TableHead>
+                    <TableHead>DJs</TableHead>
                     <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -128,17 +138,28 @@ const EventsPage: NextPage = () => {
                       </TableCell>
                       <TableCell className="font-medium">{event.name}</TableCell>
                       <TableCell>{event.venue}</TableCell>
-                      <TableCell>{event.client}</TableCell>
-                      <TableCell>{event.assignedDJs.join(', ')}</TableCell>
+                      <TableCell>{event.client.name}</TableCell>
+                      <TableCell>
+                        {event.totalValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                      </TableCell>
+                       <TableCell className="capitalize">
+                        {event.accountReceived === 'agency' ? 'Agência' : 'Conta DJ'}
+                      </TableCell>
                       <TableCell>
                         <Badge variant={getStatusVariant(event.paymentStatus)} className="capitalize">
-                          {event.paymentStatus}
+                          {event.paymentStatus === 'pending' ? 'Pendente' : 
+                           event.paymentStatus === 'partial' ? 'Parcial' :
+                           event.paymentStatus === 'paid' ? 'Pago' :
+                           event.paymentStatus === 'overdue' ? 'Vencido' :
+                           event.paymentStatus}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-right space-x-2">
+                      <TableCell>{event.assignedDJs.join(', ')}</TableCell>
+                      <TableCell className="text-right space-x-1">
                         <Button variant="outline" size="icon" aria-label="Visualizar Evento">
                           <Eye className="h-4 w-4" />
                         </Button>
+                        {/* TODO: Add role check for edit/delete */}
                         <Button variant="outline" size="icon" aria-label="Editar Evento">
                           <Edit className="h-4 w-4" />
                         </Button>
@@ -156,9 +177,9 @@ const EventsPage: NextPage = () => {
       </Card>
       {/* TODO: Add pagination if many events */}
       {/* TODO: Add filtering and sorting options */}
+      {/* TODO: Implement modals/pages for Create/Edit/View Event */}
     </div>
   );
 };
 
 export default EventsPage;
-
