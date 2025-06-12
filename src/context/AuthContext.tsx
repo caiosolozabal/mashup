@@ -60,9 +60,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         //   setRole(null); 
         // }
         // Simulating role for now:
-        if (currentUser.email?.includes('admin')) setRole('admin');
-        else if (currentUser.email?.includes('dj')) setRole('dj');
-        else setRole(null); // Default or unassigned role
+        if (currentUser.email === 'caiozz_lj@hotmail.com' || currentUser.email?.includes('admin')) {
+          setRole('admin');
+        } else if (currentUser.email?.includes('dj')) {
+          setRole('dj');
+        } else {
+          setRole(null); // Default or unassigned role
+        }
       } else {
         // setUserDetails(null);
         setRole(null);
