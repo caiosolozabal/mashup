@@ -119,79 +119,103 @@ export default function EventForm({ event, onSubmit, onCancel, isLoading, onSucc
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
+      console.log('File selected:', e.target.files[0].name);
       setSelectedProofFile(e.target.files[0]);
     } else {
+      console.log('No file selected or selection cleared.');
       setSelectedProofFile(null);
     }
   };
 
   const handleProofUpload = async () => {
-    if (!selectedProofFile || !event || !event.id) {
-      toast({ variant: 'destructive', title: 'Erro', description: 'Nenhum arquivo selecionado ou evento não definido.' });
+    console.log('handleProofUpload initiated.');
+    if (!selectedProofFile) {
+      toast({ variant: 'destructive', title: 'Erro', description: 'Nenhum arquivo selecionado.' });
+      console.error('handleProofUpload: No file selected.');
+      return;
+    }
+    if (!event || !event.id) {
+      toast({ variant: 'destructive', title: 'Erro', description: 'Evento não definido ou não salvo. Salve o evento primeiro.' });
+      console.error('handleProofUpload: Event not defined or has no ID.');
       return;
     }
     if (!storage || !db) {
       toast({ variant: 'destructive', title: 'Erro de Configuração', description: 'Firebase Storage ou Firestore não inicializado.' });
+      console.error('handleProofUpload: Firebase Storage or Firestore not initialized.');
       return;
     }
 
+    console.log(`handleProofUpload: Attempting to upload ${selectedProofFile.name} for event ${event.id}`);
     setIsUploadingProof(true);
     const proofId = uuidv4();
     const fileName = `${proofId}-${selectedProofFile.name}`;
     const filePath = `events/${event.id}/payment_proofs/${fileName}`;
     const fileSRef = storageRef(storage, filePath);
 
+    console.log(`handleProofUpload: Storage path: ${filePath}`);
+
     try {
       const uploadTask = uploadBytesResumable(fileSRef, selectedProofFile);
 
       uploadTask.on('state_changed',
         (snapshot) => {
-          // Optional: handle progress
-          // const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-          // console.log('Upload is ' + progress + '% done');
+          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+          console.log('Upload is ' + progress + '% done');
         },
-        (error) => {
-          console.error("Upload failed:", error);
-          toast({ variant: 'destructive', title: 'Falha no Upload', description: error.message });
+        (error) => { // Error callback for uploadTask
+          console.error("Firebase Storage Upload Error (uploadTask.on error callback):", error.code, error.message, error);
+          toast({ variant: 'destructive', title: 'Falha no Upload (Storage)', description: `Erro: ${error.message} (Code: ${error.code})` });
           setIsUploadingProof(false);
         },
-        async () => {
-          const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-          const newProofData: EventFile = {
-            id: proofId,
-            name: selectedProofFile.name,
-            url: downloadURL,
-            type: 'dj_receipt', 
-            uploadedAt: new Date(), 
-          };
-
-          const eventRef = doc(db, 'events', event.id);
-          await updateDoc(eventRef, {
-            payment_proofs: arrayUnion(newProofData),
-            updated_at: serverTimestamp(),
-          });
-          
-          toast({ title: 'Comprovante Enviado!', description: `${selectedProofFile.name} foi enviado com sucesso.` });
-          setSelectedProofFile(null); 
-          // Notify parent to refresh event data
-          if (onSuccessfulProofUpload) {
-            const updatedEventWithNewProof = {
-              ...event,
-              payment_proofs: [...(event.payment_proofs || []), newProofData],
-              updated_at: new Date() // Approximate, Firestore will have the server timestamp
+        async () => { // Completion callback for uploadTask
+          console.log('Firebase Storage Upload: Upload completed successfully. Getting download URL...');
+          try {
+            const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+            console.log('Firebase Storage Upload: Download URL obtained:', downloadURL);
+            
+            const newProofData: EventFile = {
+              id: proofId,
+              name: selectedProofFile.name,
+              url: downloadURL,
+              type: 'dj_receipt', 
+              uploadedAt: new Date(), 
             };
-            onSuccessfulProofUpload(updatedEventWithNewProof);
-          }
-           // Reset file input visually - this is tricky, often easier to re-render or use a key on the input
+
+            const eventRef = doc(db, 'events', event.id!); // event.id is confirmed not null by checks above
+            console.log('Firestore Update: Attempting to update event document with new proof data...');
+            await updateDoc(eventRef, {
+              payment_proofs: arrayUnion(newProofData),
+              updated_at: serverTimestamp(),
+            });
+            console.log('Firestore Update: Event document updated successfully.');
+            
+            toast({ title: 'Comprovante Enviado!', description: `${selectedProofFile.name} foi enviado com sucesso.` });
+            setSelectedProofFile(null); 
+            
+            if (onSuccessfulProofUpload) {
+              console.log('Calling onSuccessfulProofUpload callback.');
+              const updatedEventWithNewProof: Event = {
+                ...event, 
+                payment_proofs: [...(event.payment_proofs || []), newProofData],
+                updated_at: new Date() 
+              };
+              onSuccessfulProofUpload(updatedEventWithNewProof);
+            }
+            
            const fileInput = document.getElementById('payment-proof-upload') as HTMLInputElement;
            if (fileInput) fileInput.value = '';
 
-          setIsUploadingProof(false);
+          } catch (firestoreError: any) {
+            console.error("Firestore Update Error (after successful upload):", firestoreError.code, firestoreError.message, firestoreError);
+            toast({ variant: 'destructive', title: 'Erro ao Salvar Comprovante no Evento', description: `Erro: ${firestoreError.message} (Code: ${firestoreError.code})` });
+          } finally {
+            setIsUploadingProof(false);
+          }
         }
       );
-    } catch (error) {
-      console.error("Error uploading proof: ", error);
-      toast({ variant: 'destructive', title: 'Erro no Upload', description: (error as Error).message });
+    } catch (initialError: any) { // Catches errors from storageRef or initial call to uploadBytesResumable
+      console.error("Error initiating proof upload (outer try-catch):", initialError.code, initialError.message, initialError);
+      toast({ variant: 'destructive', title: 'Erro Crítico no Upload', description: `Erro: ${initialError.message} (Code: ${initialError.code})` });
       setIsUploadingProof(false);
     }
   };
@@ -503,3 +527,4 @@ export default function EventForm({ event, onSubmit, onCancel, isLoading, onSucc
     </Form>
   );
 }
+
