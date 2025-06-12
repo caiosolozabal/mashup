@@ -1,3 +1,4 @@
+
 'use client';
 import type { User } from 'firebase/auth';
 import { auth } from '@/lib/firebase'; // Ensure firebase is initialized before auth is imported
@@ -39,8 +40,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [role, setRole] = useState<UserRole>(null); // Example role state
 
   useEffect(() => {
-    if (!auth) { // Prevent errors if firebase auth is not initialized
-      setLoading(false);
+    if (!auth) { 
+      // If Firebase auth service itself isn't available (e.g., due to init error in firebase.ts),
+      // `loading` will remain true, and the message in the render block below will be shown.
+      // No need to call setLoading(false) here, as that would hide the guidance.
       return;
     }
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -76,12 +79,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     role
   }), [user, /*userDetails,*/ loading, role]);
 
+  // This screen now correctly persists if `auth` is not initialized due to errors in firebase.ts,
+  // because `loading` will remain `true` as `onAuthStateChanged` (which sets it to false) is not called.
   if (loading && typeof window !== 'undefined' && !auth) {
-    // Special case if Firebase takes a moment to init on client
      return (
-      <div className="flex h-screen w-screen items-center justify-center">
+      <div className="flex h-screen w-screen flex-col items-center justify-center bg-background p-6 text-center">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
-        <p className="ml-4 text-lg font-semibold">Initializing Firebase...</p>
+        <p className="mt-4 text-lg font-semibold">Initializing Firebase...</p>
+        <p className="mt-2 text-sm text-muted-foreground">
+          If this message persists, it likely means Firebase could not initialize.
+          This is often due to missing or incorrect Firebase configuration.
+        </p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Please check your browser&apos;s developer console for detailed error messages
+          and ensure your Firebase environment variables (e.g., <code>NEXT_PUBLIC_FIREBASE_API_KEY</code>)
+          are correctly set up in a <code>.env.local</code> file at the root of your project.
+        </p>
       </div>
     );
   }
