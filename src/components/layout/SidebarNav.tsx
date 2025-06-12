@@ -9,48 +9,48 @@ import {
   SidebarMenuButton 
 } from '@/components/ui/sidebar';
 import { LayoutDashboard, CalendarDays, Users, DollarSign, FileText, ListMusic, Settings } from 'lucide-react';
-import type { UserRole } from '@/context/AuthContext'; // Assuming UserRole type is exported
-import { useAuth } from '@/hooks/useAuth'; // To get user role
+import type { UserRole } from '@/context/AuthContext';
+import { useAuth } from '@/hooks/useAuth';
 
 interface NavItem {
   href: string;
   label: string;
   icon: React.ElementType;
-  roles?: UserRole[]; // Roles that can see this item. Undefined means all authenticated users.
+  roles?: UserRole[]; 
 }
 
 const navItems: NavItem[] = [
-  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/events', label: 'Events', icon: CalendarDays },
-  { href: '/schedule', label: 'Schedule', icon: ListMusic },
+  { href: '/dashboard', label: 'Painel', icon: LayoutDashboard },
+  { href: '/events', label: 'Eventos', icon: CalendarDays },
+  { href: '/schedule', label: 'Agenda', icon: ListMusic },
   { 
     href: '/payments', 
-    label: 'Payments', 
+    label: 'Pagamentos', 
     icon: DollarSign,
     roles: ['admin', 'partner', 'dj', 'finance'] 
   },
   { 
     href: '/documents', 
-    label: 'Documents', 
+    label: 'Documentos', 
     icon: FileText,
-    roles: ['admin', 'partner', 'manager', 'producer'] // Example
+    roles: ['admin', 'partner', 'manager', 'producer']
   },
   { 
     href: '/guests', 
-    label: 'Guest Lists', 
+    label: 'Listas VIP', 
     icon: Users,
-    roles: ['admin', 'partner', 'manager', 'producer'] // Example
+    roles: ['admin', 'partner', 'manager', 'producer']
   },
-  { href: '/settings', label: 'Settings', icon: Settings },
+  { href: '/settings', label: 'Configurações', icon: Settings },
 ];
 
 export default function SidebarNav() {
   const pathname = usePathname();
-  const { role } = useAuth(); // Get current user's role
+  const { role } = useAuth(); 
 
   const canView = (itemRoles?: UserRole[]) => {
-    if (!itemRoles) return true; // No specific roles defined, visible to all
-    if (!role) return false; // User has no role, cannot see role-specific items
+    if (!itemRoles) return true; 
+    if (!role) return false; 
     return itemRoles.includes(role);
   };
 

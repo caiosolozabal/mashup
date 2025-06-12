@@ -1,3 +1,4 @@
+
 'use client';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -59,7 +60,7 @@ export default function UserNav() {
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" className="relative h-10 w-10 rounded-full">
           <Avatar className="h-10 w-10 border-2 border-primary">
-            <AvatarImage src={user.photoURL || undefined} alt={user.displayName || 'User avatar'} />
+            <AvatarImage src={user.photoURL || undefined} alt={user.displayName || 'Avatar do usuário'} />
             <AvatarFallback className="bg-primary text-primary-foreground font-semibold">
               {getInitials(user.displayName || user.email)}
             </AvatarFallback>
@@ -70,7 +71,7 @@ export default function UserNav() {
         <DropdownMenuLabel className="font-normal">
           <div className="flex flex-col space-y-1">
             <p className="text-sm font-medium leading-none font-headline">
-              {user.displayName || 'User'}
+              {user.displayName || 'Usuário'}
             </p>
             <p className="text-xs leading-none text-muted-foreground">
               {user.email}
@@ -82,20 +83,20 @@ export default function UserNav() {
           <DropdownMenuItem asChild>
             <Link href="/settings/profile"> {/* TODO: Create profile page */}
               <User className="mr-2 h-4 w-4" />
-              <span>Profile</span>
+              <span>Perfil</span>
             </Link>
           </DropdownMenuItem>
           <DropdownMenuItem asChild>
             <Link href="/settings">
               <Settings className="mr-2 h-4 w-4" />
-              <span>Settings</span>
+              <span>Configurações</span>
             </Link>
           </DropdownMenuItem>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={handleLogout} className="text-destructive focus:bg-destructive/10 focus:text-destructive">
           <LogOut className="mr-2 h-4 w-4" />
-          <span>Log out</span>
+          <span>Sair</span>
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
