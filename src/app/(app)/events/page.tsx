@@ -77,7 +77,6 @@ const EventsPage: NextPage = () => {
           data_evento: data.data_evento instanceof Timestamp ? data.data_evento.toDate() : new Date(data.data_evento),
           created_at: data.created_at instanceof Timestamp ? data.created_at.toDate() : new Date(data.created_at),
           updated_at: data.updated_at && (data.updated_at instanceof Timestamp ? data.updated_at.toDate() : new Date(data.updated_at)),
-          // Ensure payment_proofs and files are arrays even if undefined in Firestore
           payment_proofs: Array.isArray(data.payment_proofs) ? data.payment_proofs.map(proof => ({
             ...proof,
             uploadedAt: proof.uploadedAt instanceof Timestamp ? proof.uploadedAt.toDate() : new Date(proof.uploadedAt)
@@ -86,7 +85,7 @@ const EventsPage: NextPage = () => {
             ...file,
             uploadedAt: file.uploadedAt instanceof Timestamp ? file.uploadedAt.toDate() : new Date(file.uploadedAt)
           })) : [],
-          dj_costs: data.dj_costs ?? 0, // Default to 0 if undefined
+          dj_costs: data.dj_costs ?? 0, 
         } as Event;
       });
       setEvents(eventsList);
@@ -133,7 +132,6 @@ const EventsPage: NextPage = () => {
     }
 
     setIsSubmitting(true);
-    // Prepare data for Firestore, converting Date to Timestamp
     const eventData = {
       ...values,
       dia_da_semana: getDayOfWeek(values.data_evento),
@@ -141,38 +139,31 @@ const EventsPage: NextPage = () => {
       valor_total: Number(values.valor_total),
       valor_sinal: Number(values.valor_sinal),
       dj_costs: values.dj_costs ? Number(values.dj_costs) : 0,
-      // payment_proofs and files are not handled in this submission
-      // they would be managed by separate upload functions that update the event doc
     };
     
-    // Remove undefined fields that Zod might make optional, ensure they are not sent if not intended.
     if (eventData.contratante_contato === undefined) delete (eventData as any).contratante_contato;
 
-
     try {
-      if (selectedEvent) { // Editing
+      if (selectedEvent) { 
         const eventRef = doc(db, 'events', selectedEvent.id);
-        // When editing, we might only want to update specific fields
-        // and preserve arrays like payment_proofs unless explicitly changed by an upload function.
-        // For now, we spread all form values.
         await updateDoc(eventRef, {
-          ...eventData, // This includes dj_costs
+          ...eventData,
           updated_at: serverTimestamp(),
         });
         toast({ title: 'Evento atualizado!', description: `"${values.nome_evento}" foi atualizado com sucesso.` });
-      } else { // Creating
+      } else { 
         await addDoc(collection(db, 'events'), {
           ...eventData,
           created_by: user.uid,
           created_at: serverTimestamp(),
           updated_at: serverTimestamp(),
-          payment_proofs: [], // Initialize as empty array for new events
-          files: [], // Initialize as empty array for new events
+          payment_proofs: [], 
+          files: [], 
         });
         toast({ title: 'Evento criado!', description: `"${values.nome_evento}" foi criado com sucesso.` });
       }
       setIsFormOpen(false);
-      fetchEvents(); // Refresh list
+      fetchEvents(); 
     } catch (error) {
       console.error("Error saving event: ", error);
       toast({ variant: 'destructive', title: 'Erro ao salvar evento', description: (error as Error).message });
@@ -189,8 +180,9 @@ const EventsPage: NextPage = () => {
     setIsSubmitting(true);
     try {
       await deleteDoc(doc(db, 'events', selectedEvent.id));
+      // TODO: Delete associated files from Firebase Storage if needed
       toast({ title: 'Evento excluído!', description: `"${selectedEvent.nome_evento}" foi excluído com sucesso.` });
-      fetchEvents(); // Refresh list
+      fetchEvents(); 
       setIsDeleteConfirmOpen(false);
       setSelectedEvent(null);
     } catch (error) {
@@ -199,6 +191,14 @@ const EventsPage: NextPage = () => {
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleSuccessfulProofUpload = (updatedEvent: Event) => {
+    // Update the selectedEvent in state to reflect the new proof in the form
+    setSelectedEvent(updatedEvent);
+    // Optionally, find and update the event in the main 'events' list as well for immediate UI update
+    setEvents(prevEvents => prevEvents.map(e => e.id === updatedEvent.id ? updatedEvent : e));
+    // fetchEvents(); // Or just refetch all, simpler but less optimized
   };
 
 
@@ -210,7 +210,6 @@ const EventsPage: NextPage = () => {
             <CardTitle className="font-headline text-2xl">Gerenciar Eventos</CardTitle>
             <CardDescription>Visualize, crie e edite os eventos da agência.</CardDescription>
           </div>
-          {/* TODO: Add role check for displaying this button (admin/partner) */}
           <Button onClick={handleOpenCreateForm} className="ml-auto bg-primary hover:bg-primary/90 text-primary-foreground">
             <PlusCircle className="mr-2 h-5 w-5" />
             Novo Evento
@@ -267,7 +266,6 @@ const EventsPage: NextPage = () => {
                         <Button variant="outline" size="icon" aria-label="Visualizar Evento" onClick={() => handleOpenView(event)}>
                           <Eye className="h-4 w-4" />
                         </Button>
-                        {/* TODO: Add role check for edit/delete */}
                         <Button variant="outline" size="icon" aria-label="Editar Evento" onClick={() => handleOpenEditForm(event)}>
                           <Edit className="h-4 w-4" />
                         </Button>
@@ -284,7 +282,6 @@ const EventsPage: NextPage = () => {
         </CardContent>
       </Card>
 
-      {/* Event Form Dialog */}
       <Dialog open={isFormOpen} onOpenChange={(open) => { setIsFormOpen(open); if (!open) setSelectedEvent(null); }}>
         <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -298,11 +295,11 @@ const EventsPage: NextPage = () => {
             onSubmit={handleFormSubmit}
             onCancel={() => { setIsFormOpen(false); setSelectedEvent(null); }}
             isLoading={isSubmitting}
+            onSuccessfulProofUpload={handleSuccessfulProofUpload}
           />
         </DialogContent>
       </Dialog>
 
-      {/* Event View Dialog */}
       <Dialog open={isViewOpen} onOpenChange={(open) => { setIsViewOpen(open); if (!open) setSelectedEvent(null); }}>
         <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto">
           <EventView event={selectedEvent} />
@@ -312,7 +309,6 @@ const EventsPage: NextPage = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Delete Confirmation Dialog */}
       <AlertDialog open={isDeleteConfirmOpen} onOpenChange={setIsDeleteConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>

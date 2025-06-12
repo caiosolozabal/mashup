@@ -17,14 +17,20 @@ import {
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { CalendarIcon, Loader2, Paperclip, FileText, UploadCloud } from 'lucide-react';
+import { CalendarIcon, Loader2, FileText, UploadCloud } from 'lucide-react';
 import { Calendar } from '@/components/ui/calendar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
 import type { Event, EventFile } from '@/lib/types';
-import { Timestamp } from 'firebase/firestore';
+import { Timestamp, doc, updateDoc, arrayUnion, serverTimestamp } from 'firebase/firestore';
 import { Separator } from '@/components/ui/separator';
+import { useState } from 'react';
+import { db, storage } from '@/lib/firebase'; 
+import { ref as storageRef, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
+import { useToast } from '@/hooks/use-toast';
+import { v4 as uuidv4 } from 'uuid';
+
 
 const getDayOfWeek = (date: Date | undefined): string => {
   if (!date) return '';
@@ -45,7 +51,6 @@ const eventFormSchema = z.object({
   dj_nome: z.string().min(2, { message: 'Nome do DJ é obrigatório.' }),
   dj_id: z.string().min(1, { message: 'ID do DJ é obrigatório (pode ser um placeholder por enquanto).' }),
   dj_costs: z.coerce.number().min(0, { message: 'Custos do DJ não podem ser negativos.' }).default(0).optional(),
-  // payment_proofs will be handled separately, not directly part of the Zod schema for form data submission in this iteration
 });
 
 export type EventFormValues = z.infer<typeof eventFormSchema>;
@@ -55,14 +60,18 @@ interface EventFormProps {
   onSubmit: (values: EventFormValues) => Promise<void>;
   onCancel: () => void;
   isLoading?: boolean;
+  onSuccessfulProofUpload?: (updatedEvent: Event) => void;
 }
 
-export default function EventForm({ event, onSubmit, onCancel, isLoading }: EventFormProps) {
+export default function EventForm({ event, onSubmit, onCancel, isLoading, onSuccessfulProofUpload }: EventFormProps) {
+  const { toast } = useToast();
+  const [selectedProofFile, setSelectedProofFile] = useState<File | null>(null);
+  const [isUploadingProof, setIsUploadingProof] = useState(false);
   
   const defaultValuesForCreate: EventFormValues = {
     nome_evento: '',
     local: '',
-    data_evento: undefined as any, // Calendar component handles undefined
+    data_evento: undefined as any,
     contratante_nome: '',
     contratante_contato: '',
     valor_total: 0,
@@ -107,6 +116,86 @@ export default function EventForm({ event, onSubmit, onCancel, isLoading }: Even
     };
     await onSubmit(submissionValues);
   };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setSelectedProofFile(e.target.files[0]);
+    } else {
+      setSelectedProofFile(null);
+    }
+  };
+
+  const handleProofUpload = async () => {
+    if (!selectedProofFile || !event || !event.id) {
+      toast({ variant: 'destructive', title: 'Erro', description: 'Nenhum arquivo selecionado ou evento não definido.' });
+      return;
+    }
+    if (!storage || !db) {
+      toast({ variant: 'destructive', title: 'Erro de Configuração', description: 'Firebase Storage ou Firestore não inicializado.' });
+      return;
+    }
+
+    setIsUploadingProof(true);
+    const proofId = uuidv4();
+    const fileName = `${proofId}-${selectedProofFile.name}`;
+    const filePath = `events/${event.id}/payment_proofs/${fileName}`;
+    const fileSRef = storageRef(storage, filePath);
+
+    try {
+      const uploadTask = uploadBytesResumable(fileSRef, selectedProofFile);
+
+      uploadTask.on('state_changed',
+        (snapshot) => {
+          // Optional: handle progress
+          // const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+          // console.log('Upload is ' + progress + '% done');
+        },
+        (error) => {
+          console.error("Upload failed:", error);
+          toast({ variant: 'destructive', title: 'Falha no Upload', description: error.message });
+          setIsUploadingProof(false);
+        },
+        async () => {
+          const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+          const newProofData: EventFile = {
+            id: proofId,
+            name: selectedProofFile.name,
+            url: downloadURL,
+            type: 'dj_receipt', 
+            uploadedAt: new Date(), 
+          };
+
+          const eventRef = doc(db, 'events', event.id);
+          await updateDoc(eventRef, {
+            payment_proofs: arrayUnion(newProofData),
+            updated_at: serverTimestamp(),
+          });
+          
+          toast({ title: 'Comprovante Enviado!', description: `${selectedProofFile.name} foi enviado com sucesso.` });
+          setSelectedProofFile(null); 
+          // Notify parent to refresh event data
+          if (onSuccessfulProofUpload) {
+            const updatedEventWithNewProof = {
+              ...event,
+              payment_proofs: [...(event.payment_proofs || []), newProofData],
+              updated_at: new Date() // Approximate, Firestore will have the server timestamp
+            };
+            onSuccessfulProofUpload(updatedEventWithNewProof);
+          }
+           // Reset file input visually - this is tricky, often easier to re-render or use a key on the input
+           const fileInput = document.getElementById('payment-proof-upload') as HTMLInputElement;
+           if (fileInput) fileInput.value = '';
+
+          setIsUploadingProof(false);
+        }
+      );
+    } catch (error) {
+      console.error("Error uploading proof: ", error);
+      toast({ variant: 'destructive', title: 'Erro no Upload', description: (error as Error).message });
+      setIsUploadingProof(false);
+    }
+  };
+
 
   return (
     <Form {...form}>
@@ -363,7 +452,7 @@ export default function EventForm({ event, onSubmit, onCancel, isLoading }: Even
                     <a href={proof.url} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline">
                       {proof.name}
                     </a>
-                    <span className="text-xs text-muted-foreground">({format(new Date(proof.uploadedAt), 'dd/MM/yy')})</span>
+                    <span className="text-xs text-muted-foreground">({format(proof.uploadedAt instanceof Timestamp ? proof.uploadedAt.toDate() : new Date(proof.uploadedAt), 'dd/MM/yy')})</span>
                   </div>
                   {/* TODO: Add delete button for proofs - requires backend logic */}
                 </li>
@@ -376,25 +465,37 @@ export default function EventForm({ event, onSubmit, onCancel, isLoading }: Even
             <FormLabel htmlFor="payment-proof-upload">Enviar Novo Comprovante</FormLabel>
             <div className="flex items-center gap-2">
               <FormControl>
-                <Input id="payment-proof-upload" type="file" className="flex-grow" disabled /> 
-                {/* Actual upload logic to be implemented later */}
+                <Input 
+                  id="payment-proof-upload" 
+                  type="file" 
+                  className="flex-grow" 
+                  onChange={handleFileSelect}
+                  accept="image/*,application/pdf"
+                  disabled={isUploadingProof || !event?.id}
+                /> 
               </FormControl>
-              <Button type="button" variant="outline" disabled> {/* Make functional later */}
-                <UploadCloud className="mr-2 h-4 w-4" />
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={handleProofUpload} 
+                disabled={isUploadingProof || !selectedProofFile || !event?.id}
+              >
+                {isUploadingProof ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UploadCloud className="mr-2 h-4 w-4" />}
                 Upload
               </Button>
             </div>
-            <FormDescription>Selecione o arquivo do comprovante (PDF, JPG, PNG). O upload será implementado em breve.</FormDescription>
+            <FormDescription>Selecione o arquivo do comprovante (PDF, JPG, PNG). Máx 5MB.</FormDescription>
+             { !event?.id && <FormDescription className="text-destructive">Salve o evento primeiro para poder enviar comprovantes.</FormDescription>}
           </FormItem>
         </div>
 
 
         <div className="flex justify-end space-x-2 pt-4">
-          <Button type="button" variant="outline" onClick={onCancel} disabled={isLoading}>
+          <Button type="button" variant="outline" onClick={onCancel} disabled={isLoading || isUploadingProof}>
             Cancelar
           </Button>
-          <Button type="submit" disabled={isLoading} className="bg-primary hover:bg-primary/90 text-primary-foreground">
-            {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+          <Button type="submit" disabled={isLoading || isUploadingProof} className="bg-primary hover:bg-primary/90 text-primary-foreground">
+            {(isLoading || isUploadingProof) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             {event ? 'Salvar Alterações' : 'Criar Evento'}
           </Button>
         </div>
