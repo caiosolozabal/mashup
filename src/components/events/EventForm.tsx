@@ -15,9 +15,8 @@ import {
   FormMessage,
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
-// Removed Textarea as it's not used directly in this version of the form
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { CalendarIcon, Loader2, FileText, UploadCloud, Users } from 'lucide-react';
+import { CalendarIcon, Loader2, FileText, UploadCloud } from 'lucide-react';
 import { Calendar } from '@/components/ui/calendar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
@@ -25,7 +24,7 @@ import { format, parseISO } from 'date-fns';
 import type { Event, EventFile, UserDetails } from '@/lib/types';
 import { Timestamp, doc, updateDoc, arrayUnion, serverTimestamp, collection, query, where, getDocs } from 'firebase/firestore';
 import { Separator } from '@/components/ui/separator';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { db, storage } from '@/lib/firebase';
 import { ref as storageRef, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { useToast } from '@/hooks/use-toast';
@@ -68,7 +67,7 @@ interface EventFormProps {
 
 export default function EventForm({ event, onSubmit, onCancel, isLoading, onSuccessfulProofUpload }: EventFormProps) {
   const { toast } = useToast();
-  const { user, userDetails } = useAuth();
+  const { userDetails } = useAuth(); // Removed 'user' as it's part of userDetails or not directly needed here
   const [selectedProofFile, setSelectedProofFile] = useState<File | null>(null);
   const [isUploadingProof, setIsUploadingProof] = useState(false);
   const [availableDjs, setAvailableDjs] = useState<UserDetails[]>([]);
@@ -83,7 +82,7 @@ export default function EventForm({ event, onSubmit, onCancel, isLoading, onSucc
         try {
           const djsQuery = query(collection(db, 'users'), where('role', '==', 'dj'));
           const querySnapshot = await getDocs(djsQuery);
-          const djsList = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as UserDetails));
+          const djsList = querySnapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserDetails));
           setAvailableDjs(djsList);
         } catch (error) {
           console.error("Error fetching DJs: ", error);
@@ -96,10 +95,10 @@ export default function EventForm({ event, onSubmit, onCancel, isLoading, onSucc
     fetchDjs();
   }, [isUserAdminOrPartner, toast]);
   
-  const defaultValuesForCreate: EventFormValues = {
+  const defaultValuesForCreate = useMemo<EventFormValues>(() => ({
     nome_evento: '',
     local: '',
-    data_evento: undefined as any,
+    data_evento: undefined as any, 
     horario_inicio: '',
     horario_fim: '',
     contratante_nome: '',
@@ -108,19 +107,26 @@ export default function EventForm({ event, onSubmit, onCancel, isLoading, onSucc
     valor_sinal: 0,
     conta_que_recebeu: 'agencia',
     status_pagamento: 'pendente',
-    dj_nome: '',
-    dj_id: '',
+    dj_nome: (userDetails?.role === 'dj' ? userDetails.displayName || userDetails.email || '' : ''),
+    dj_id: (userDetails?.role === 'dj' ? userDetails.uid : ''),
     dj_costs: 0,
-  };
+  }), [userDetails]);
 
-  const defaultValues = event
-    ? {
+
+  const defaultValues = useMemo<EventFormValues>(() => {
+    if (event) {
+      let eventDate = event.data_evento;
+      if (event.data_evento instanceof Timestamp) {
+        eventDate = event.data_evento.toDate();
+      } else if (typeof event.data_evento === 'string') {
+        eventDate = parseISO(event.data_evento);
+      }
+
+      return {
         ...event,
         nome_evento: event.nome_evento || '',
         local: event.local || '',
-        data_evento: event.data_evento instanceof Timestamp 
-            ? event.data_evento.toDate() 
-            : (typeof event.data_evento === 'string' ? parseISO(event.data_evento) : event.data_evento),
+        data_evento: eventDate as Date, // Ensure it's a Date object
         horario_inicio: event.horario_inicio ?? '',
         horario_fim: event.horario_fim ?? '',
         contratante_nome: event.contratante_nome || '',
@@ -132,21 +138,24 @@ export default function EventForm({ event, onSubmit, onCancel, isLoading, onSucc
         dj_nome: event.dj_nome || '',
         dj_id: event.dj_id || '',
         dj_costs: event.dj_costs ? Number(event.dj_costs) : 0,
-      }
-    : defaultValuesForCreate;
+      };
+    }
+    return defaultValuesForCreate;
+  }, [event, defaultValuesForCreate]);
+
 
   const form = useForm<EventFormValues>({
     resolver: zodResolver(eventFormSchema),
-    defaultValues,
+    defaultValues, 
   });
 
   useEffect(() => {
-    // Reset form with new default values if the event prop changes
     form.reset(defaultValues);
-  }, [event, form, defaultValues]);
+  }, [defaultValues, form.reset]);
 
 
   const handleSubmit = async (values: EventFormValues) => {
+    console.log("Submitting values:", values);
     const submissionValues = {
       ...values,
       horario_inicio: values.horario_inicio === '' ? null : values.horario_inicio,
@@ -165,27 +174,35 @@ export default function EventForm({ event, onSubmit, onCancel, isLoading, onSucc
     }
   };
 
-  const handleProofUpload = async () => {
+ const handleProofUpload = async () => {
+    console.log("handleProofUpload initiated");
     if (!selectedProofFile) {
       toast({ variant: 'destructive', title: 'Erro', description: 'Nenhum arquivo selecionado.' });
+      console.error("No proof file selected");
       return;
     }
     if (!event || !event.id) {
       toast({ variant: 'destructive', title: 'Erro', description: 'Evento não definido ou não salvo. Salve o evento primeiro.' });
+      console.error("Event not defined or not saved. Event:", event);
       return;
     }
     if (!storage || !db) {
       toast({ variant: 'destructive', title: 'Erro de Configuração', description: 'Firebase Storage ou Firestore não inicializado.' });
+      console.error("Firebase Storage or Firestore not initialized. Storage:", !!storage, "DB:", !!db);
       return;
     }
 
     setIsUploadingProof(true);
+    console.log("isUploadingProof set to true");
+
     const proofId = uuidv4();
     const fileName = `${proofId}-${selectedProofFile.name}`;
     const filePath = `events/${event.id}/payment_proofs/${fileName}`;
+    console.log("Generated filePath for upload:", filePath);
     const fileSRef = storageRef(storage, filePath);
 
     try {
+      console.log("Attempting to upload file:", selectedProofFile.name, "to", filePath);
       const uploadTask = uploadBytesResumable(fileSRef, selectedProofFile);
 
       uploadTask.on('state_changed',
@@ -194,13 +211,17 @@ export default function EventForm({ event, onSubmit, onCancel, isLoading, onSucc
           console.log('Upload is ' + progress + '% done');
         },
         (error) => { 
-          console.error("Firebase Storage Upload Error:", error.code, error.message, error);
+          console.error("Firebase Storage Upload Error in on('state_changed'):", error);
           toast({ variant: 'destructive', title: 'Falha no Upload (Storage)', description: `Erro: ${error.message} (Code: ${error.code})` });
           setIsUploadingProof(false);
+          console.log("isUploadingProof set to false due to storage upload error");
         },
         async () => { 
           try {
+            console.log("Upload completed successfully for", fileName);
             const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+            console.log("Download URL obtained:", downloadURL);
+
             const newProofData: EventFile = {
               id: proofId,
               name: selectedProofFile.name,
@@ -208,17 +229,21 @@ export default function EventForm({ event, onSubmit, onCancel, isLoading, onSucc
               type: 'dj_receipt', 
               uploadedAt: new Date(), 
             };
+            console.log("New proof data created:", newProofData);
 
             const eventRef = doc(db, 'events', event.id!);
+            console.log("Attempting to update event document:", event.id);
             await updateDoc(eventRef, {
               payment_proofs: arrayUnion(newProofData),
               updated_at: serverTimestamp(),
             });
+            console.log("Event document updated successfully.");
             
             toast({ title: 'Comprovante Enviado!', description: `${selectedProofFile.name} foi enviado com sucesso.` });
             setSelectedProofFile(null); 
             
             if (onSuccessfulProofUpload) {
+              console.log("Calling onSuccessfulProofUpload callback");
               const updatedEventWithNewProof: Event = {
                 ...event, 
                 payment_proofs: [...(event.payment_proofs || []), newProofData],
@@ -229,19 +254,22 @@ export default function EventForm({ event, onSubmit, onCancel, isLoading, onSucc
             
            const fileInput = document.getElementById('payment-proof-upload') as HTMLInputElement;
            if (fileInput) fileInput.value = '';
+           console.log("File input reset.");
 
           } catch (firestoreError: any) {
-            console.error("Firestore Update Error (after upload):", firestoreError.code, firestoreError.message, firestoreError);
+            console.error("Firestore Update Error (after upload):", firestoreError);
             toast({ variant: 'destructive', title: 'Erro ao Salvar Comprovante', description: `Erro: ${firestoreError.message} (Code: ${firestoreError.code})` });
           } finally {
             setIsUploadingProof(false);
+            console.log("isUploadingProof set to false in upload completion block");
           }
         }
       );
     } catch (initialError: any) { 
-      console.error("Error initiating proof upload:", initialError.code, initialError.message, initialError);
+      console.error("Error initiating proof upload (outer try-catch):", initialError);
       toast({ variant: 'destructive', title: 'Erro Crítico no Upload', description: `Erro: ${initialError.message} (Code: ${initialError.code})` });
       setIsUploadingProof(false);
+      console.log("isUploadingProof set to false due to initial upload error");
     }
   };
 
@@ -332,21 +360,6 @@ export default function EventForm({ event, onSubmit, onCancel, isLoading, onSucc
                 </FormItem>
               )}
             />
-            {/* O campo horario_fim pode ser adicionado se necessário no futuro
-            <FormField
-              control={form.control}
-              name="horario_fim"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Horário Fim (Opcional)</FormLabel>
-                  <FormControl>
-                    <Input type="time" {...field} value={field.value ?? ''} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            */}
         </div>
 
 
@@ -429,7 +442,7 @@ export default function EventForm({ event, onSubmit, onCancel, isLoading, onSucc
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Conta que Recebeu o Sinal</FormLabel>
-                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                <Select onValueChange={field.onChange} value={field.value}>
                   <FormControl>
                     <SelectTrigger>
                       <SelectValue placeholder="Selecione a conta" />
@@ -450,7 +463,7 @@ export default function EventForm({ event, onSubmit, onCancel, isLoading, onSucc
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Status do Pagamento</FormLabel>
-                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                <Select onValueChange={field.onChange} value={field.value}>
                   <FormControl>
                     <SelectTrigger>
                       <SelectValue placeholder="Selecione o status" />
@@ -473,19 +486,23 @@ export default function EventForm({ event, onSubmit, onCancel, isLoading, onSucc
         {isUserAdminOrPartner ? (
           <FormField
             control={form.control}
-            name="dj_id" // Controla o dj_id, dj_nome é atualizado via setValue
+            name="dj_id"
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Atribuir DJ</FormLabel>
                 <Select
+                  value={field.value || ''} // Ensure value is controlled, provide empty string if field.value is undefined
                   onValueChange={(value) => {
                     const selectedDj = availableDjs.find(dj => dj.uid === value);
                     if (selectedDj) {
-                      form.setValue('dj_id', selectedDj.uid);
-                      form.setValue('dj_nome', selectedDj.displayName || selectedDj.email || 'DJ Sem Nome');
+                      form.setValue('dj_id', selectedDj.uid, { shouldValidate: true });
+                      form.setValue('dj_nome', selectedDj.displayName || selectedDj.email || 'DJ Sem Nome', { shouldValidate: true });
+                    } else {
+                       // Handle case where "Selecione um DJ" might be re-selected or value is cleared
+                       form.setValue('dj_id', '', { shouldValidate: true });
+                       form.setValue('dj_nome', '', { shouldValidate: true });
                     }
                   }}
-                  defaultValue={field.value}
                   disabled={isLoadingDjs}
                 >
                   <FormControl>
@@ -513,8 +530,6 @@ export default function EventForm({ event, onSubmit, onCancel, isLoading, onSucc
             )}
           />
         ) : (
-          // DJ view: show read-only DJ info if event exists and they are assigned
-          // Or pre-fill if DJ is creating (future enhancement)
           event?.dj_id && (
             <div className="space-y-2">
                 <div>
@@ -523,13 +538,11 @@ export default function EventForm({ event, onSubmit, onCancel, isLoading, onSucc
                         {form.getValues('dj_nome')} (ID: {form.getValues('dj_id')})
                     </p>
                 </div>
-                {/* Hidden inputs to keep values in form state for DJs, not strictly necessary if displayed as text only */}
                 <FormField control={form.control} name="dj_nome" render={({ field }) => <Input {...field} type="hidden" />} />
                 <FormField control={form.control} name="dj_id" render={({ field }) => <Input {...field} type="hidden" />} />
             </div>
           )
         )}
-        {/* Ensure dj_nome is validated if admin didn't pick from dropdown (e.g. initial state) */}
         {isUserAdminOrPartner && form.formState.errors.dj_nome && !form.getValues('dj_id') && (
              <p className="text-sm font-medium text-destructive">{form.formState.errors.dj_nome.message}</p>
         )}
@@ -598,5 +611,3 @@ export default function EventForm({ event, onSubmit, onCancel, isLoading, onSucc
     </Form>
   );
 }
-
-    
