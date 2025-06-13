@@ -1,0 +1,7 @@
+{
+    "firestore": {
+      "rules": "firestore.rules"
+      // "indexes": "firestore.indexes.json" // Descomente se você tiver índices
+    }
+    // Outras configurações do Firebase podem estar aqui (hosting, functions, etc.)
+  }

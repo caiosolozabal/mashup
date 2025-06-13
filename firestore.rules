@@ -1,0 +1,36 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Regras para a coleção 'events'
+    match /events/{eventId} {
+      // Permite que qualquer usuário autenticado leia e escreva eventos.
+      // Para desenvolvimento. Refine para produção!
+      allow read, write: if request.auth != null;
+    }
+
+    // Regras para a coleção 'users' (ESSENCIAL PARA O LOGIN E DETALHES DO USUÁRIO)
+    match /users/{userId} {
+      // Permite que usuários autenticados leiam perfis de usuário
+      // (necessário para AuthContext buscar userDetails).
+      allow read: if request.auth != null;
+
+      // Permite que um usuário crie seu próprio perfil de usuário
+      // (necessário para AuthContext criar o perfil no primeiro login).
+      allow create: if request.auth != null;
+      
+      // Permite que um usuário atualize apenas o seu próprio perfil.
+      allow update: if request.auth != null && request.auth.uid == userId;
+
+      // Normalmente, não se permite delete de perfis de usuário de forma tão aberta.
+      // allow delete: if false; // ou regras mais específicas se necessário
+    }
+
+    // Se você tiver uma coleção 'djs', adicione regras para ela também:
+    // match /djs/{djId} {
+    //   allow read: if request.auth != null;
+    //   allow write: if request.auth != null; // Restrinja em produção
+    // }
+  }
+}
