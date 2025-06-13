@@ -30,11 +30,11 @@ const getStatusText = (status?: Event['status_pagamento']): string => {
 
 const getEventColorVar = (status?: Event['status_pagamento']): string => {
   switch (status) {
-    case 'pago': return '--chart-3'; // Teal like
-    case 'parcial': return '--chart-4'; // Orange like
-    case 'pendente': return '--destructive'; // Red
-    case 'vencido': return '--destructive'; // Red
-    case 'cancelado': return '--muted'; // Grey
+    case 'pago': return '--chart-3'; 
+    case 'parcial': return '--chart-4'; 
+    case 'pendente': return '--destructive'; 
+    case 'vencido': return '--destructive'; 
+    case 'cancelado': return '--muted'; 
     default: return '--foreground'; 
   }
 };
@@ -51,7 +51,7 @@ export default function ScheduleCalendarView({ events }: ScheduleCalendarViewPro
 
   const DayContent = (props: { date: Date }) => {
     const dayEvents = events.filter(eventItem => eventItem.data_evento && isSameDay(eventItem.data_evento, props.date));
-    const MAX_VISIBLE_EVENTS = 2;
+    const MAX_VISIBLE_EVENTS = 2; // Adjusted to fit better in potentially smaller cells
     
     const renderDateNumber = () => (
       <span className={`absolute top-1 left-1 text-xs ${isSameDay(props.date, new Date()) ? 'font-bold text-primary' : 'text-muted-foreground'}`}>
@@ -61,6 +61,7 @@ export default function ScheduleCalendarView({ events }: ScheduleCalendarViewPro
 
     return (
       <TooltipProvider>
+        {/* This div fills the cell and arranges content */}
         <div className="flex flex-col items-stretch justify-start w-full h-full relative pt-5 px-1 space-y-0.5 overflow-hidden">
           {renderDateNumber()}
           {dayEvents.slice(0, MAX_VISIBLE_EVENTS).map(event => (
@@ -74,7 +75,7 @@ export default function ScheduleCalendarView({ events }: ScheduleCalendarViewPro
                   style={{ backgroundColor: `hsl(var(${getEventColorVar(event.status_pagamento)}))` }}
                   title={`${event.nome_evento} (${getStatusText(event.status_pagamento)})`}
                 >
-                  {event.horario_inicio ? `${event.horario_inicio} - ` : ''}{event.nome_evento}
+                  {event.horario_inicio ? `${event.horario_inicio.substring(0,5)} - ` : ''}{event.nome_evento}
                 </div>
               </TooltipTrigger>
               <TooltipContent side="top" className="p-2 text-xs bg-background border-border shadow-lg rounded-md">
@@ -86,8 +87,10 @@ export default function ScheduleCalendarView({ events }: ScheduleCalendarViewPro
           ))}
           {dayEvents.length > MAX_VISIBLE_EVENTS && (
             <div
-              className="text-[10px] text-center text-muted-foreground py-0.5 cursor-pointer hover:underline"
+              className="text-[10px] text-center text-muted-foreground py-0.5 cursor-pointer hover:underline mt-auto" // mt-auto to push it down
               onClick={() => {
+                // For simplicity, clicking "+X more" could open the first event,
+                // or ideally a list/modal of all events for that day.
                 if (dayEvents.length > 0) {
                     handleEventClick(dayEvents[0]); 
                 }
@@ -98,6 +101,7 @@ export default function ScheduleCalendarView({ events }: ScheduleCalendarViewPro
             </div>
           )}
            {dayEvents.length === 0 && (
+            // This div helps maintain cell height even when empty
             <div className="flex-grow w-full"> </div>
           )}
         </div>
@@ -113,7 +117,9 @@ export default function ScheduleCalendarView({ events }: ScheduleCalendarViewPro
         mode="single"
         selected={selectedDate}
         onSelect={setSelectedDate}
-        className="rounded-md border p-0 shadow-sm"
+        // className="rounded-md border p-0 shadow-sm"
+        // Try restoring default padding for react-day-picker and ensure w-full
+        className="rounded-md border shadow-sm w-full p-3" 
         month={selectedDate}
         onMonthChange={setSelectedDate}
         components={{
@@ -126,7 +132,6 @@ export default function ScheduleCalendarView({ events }: ScheduleCalendarViewPro
             today: 'border-2 border-primary rounded-md', 
         }}
         classNames={{
-          // Inherit most defaults from shadcn/ui's calendar for consistency
           months: "flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0",
           month: "space-y-4",
           caption: "flex justify-center pt-1 relative items-center",
@@ -138,19 +143,22 @@ export default function ScheduleCalendarView({ events }: ScheduleCalendarViewPro
           ),
           nav_button_previous: "absolute left-1",
           nav_button_next: "absolute right-1",
-          table: "w-full border-collapse space-y-1", // Ensures table takes full width
-          head_row: "flex", // Days of week row
-          head_cell: "flex-1 text-muted-foreground rounded-md font-normal text-[0.8rem] text-center p-1", // Cells share width
           
-          row: "flex w-full mt-2", // Week row
-          cell: "flex-1 h-24 text-sm p-0 relative focus-within:relative focus-within:z-20 border-t border-border", // Cells share width, set height, custom border
+          table: "w-full border-collapse", // Removed space-y-1, flex handles spacing
+          head_row: "flex", 
+          head_cell: "flex-1 text-muted-foreground rounded-md font-normal text-[0.8rem] text-center p-1",
           
-          day: cn( // The interactive area within a cell
-            buttonVariants({ variant: "ghost" }), // Basic button styles
-            "h-full w-full p-0 font-normal aria-selected:opacity-100 flex items-stretch justify-stretch" // Fill cell
+          row: "flex w-full mt-1", // Reduced margin top a bit
+          // Ensure cell is flex-1 and has minimal padding to allow DayContent to fill
+          cell: "flex-1 h-24 text-sm relative focus-within:relative focus-within:z-20 border-t border-border p-0", 
+          
+          // Day should allow DayContent to fill it completely
+          day: cn(
+            buttonVariants({ variant: "ghost" }), 
+            "h-full w-full p-0 font-normal aria-selected:opacity-100 flex items-stretch justify-stretch" 
           ),
-          day_selected: "bg-primary/20 text-primary-foreground ring-1 ring-primary",
-          day_today: "bg-transparent text-foreground", // Today's specific styling is handled by DayContent mostly
+          day_selected: "bg-primary/10 text-primary ring-1 ring-primary/50", // Softer selection
+          day_today: "bg-transparent text-foreground", 
           day_outside: "day-outside text-muted-foreground opacity-50 aria-selected:bg-accent/50 aria-selected:text-muted-foreground",
           day_disabled: "text-muted-foreground opacity-50",
           day_range_middle: "aria-selected:bg-accent aria-selected:text-accent-foreground",
@@ -171,3 +179,5 @@ export default function ScheduleCalendarView({ events }: ScheduleCalendarViewPro
     </>
   );
 }
+
+    
