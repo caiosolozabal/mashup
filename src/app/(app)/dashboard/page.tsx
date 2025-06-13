@@ -6,10 +6,11 @@ import { useAuth } from '@/hooks/useAuth';
 import { BarChart, CalendarClock, ListChecks, Users, Loader2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, query, where, orderBy, limit, Timestamp, startOfMonth, endOfMonth } from 'firebase/firestore';
+import { collection, getDocs, query, where, orderBy, limit, Timestamp } from 'firebase/firestore';
 import type { Event, UserDetails } from '@/lib/types';
-import { format } from 'date-fns';
+import { format, startOfMonth, endOfMonth } from 'date-fns';
 import Link from 'next/link';
+import { useToast } from '@/hooks/use-toast';
 
 interface StatCard {
   title: string;
@@ -32,6 +33,7 @@ interface DashboardEvent {
 
 export default function DashboardPage() {
   const { user } = useAuth();
+  const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(true);
   const [stats, setStats] = useState<StatCard[]>([]);
   const [recentActivities, setRecentActivities] = useState<DashboardEvent[]>([]);
@@ -43,7 +45,6 @@ export default function DashboardPage() {
       if (!db) {
         console.error("Firestore not initialized");
         setIsLoading(false);
-        // Initialize stats with error messages or zeros
         setStats([
           { title: 'Eventos Ativos', value: 'Erro', icon: CalendarClock, color: 'text-destructive' },
           { title: 'Total de DJs', value: 'Erro', icon: Users, color: 'text-destructive' },
@@ -54,7 +55,6 @@ export default function DashboardPage() {
       }
 
       try {
-        // Fetch all non-cancelled events
         const eventsCollectionRef = collection(db, 'events');
         const allEventsQuery = query(eventsCollectionRef, where('status_pagamento', '!=', 'cancelado'));
         const allEventsSnapshot = await getDocs(allEventsQuery);
@@ -69,20 +69,16 @@ export default function DashboardPage() {
           } as Event;
         });
 
-        // 1. Active Events (all non-cancelled events)
         const activeEventsCount = allEventsList.length;
 
-        // 2. Total DJs
         const usersCollectionRef = collection(db, 'users');
         const djsQuery = query(usersCollectionRef, where('role', '==', 'dj'));
         const djsSnapshot = await getDocs(djsQuery);
         const totalDjsCount = djsSnapshot.size;
 
-        // 3. Upcoming Gigs
         const now = new Date();
         const upcomingGigsCount = allEventsList.filter(event => event.data_evento > now).length;
 
-        // 4. Revenue (Month)
         const currentMonthStart = startOfMonth(now);
         const currentMonthEnd = endOfMonth(now);
         const monthlyRevenue = allEventsList
@@ -91,7 +87,7 @@ export default function DashboardPage() {
             event.data_evento <= currentMonthEnd &&
             event.status_pagamento === 'pago'
           )
-          .reduce((sum, event) => sum + event.valor_total, 0);
+          .reduce((sum, event) => sum + (event.valor_total || 0), 0);
 
         setStats([
           { title: 'Eventos Ativos', value: activeEventsCount, icon: CalendarClock, color: 'text-primary' },
@@ -100,7 +96,6 @@ export default function DashboardPage() {
           { title: `Receita (Mês ${format(now, 'MM/yy')})`, value: monthlyRevenue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }), icon: BarChart, color: 'text-blue-500' },
         ]);
 
-        // Fetch Recent Activities (last 3 updated/created events, non-cancelled)
         const recentActivityQuery = query(
           eventsCollectionRef, 
           where('status_pagamento', '!=', 'cancelado'),
@@ -113,7 +108,7 @@ export default function DashboardPage() {
           return {
             id: doc.id,
             nome_evento: data.nome_evento,
-            local: data.local, // Added local for consistency
+            local: data.local,
             data_evento: data.data_evento instanceof Timestamp ? data.data_evento.toDate() : new Date(data.data_evento),
             updated_at: data.updated_at instanceof Timestamp ? data.updated_at.toDate() : new Date(data.updated_at),
             created_at: data.created_at instanceof Timestamp ? data.created_at.toDate() : new Date(data.created_at),
@@ -121,7 +116,6 @@ export default function DashboardPage() {
         });
         setRecentActivities(recentActivitiesList);
 
-        // Fetch Upcoming Events (next 3, non-cancelled)
         const upcomingEventsQuery = query(
           eventsCollectionRef, 
           where('status_pagamento', '!=', 'cancelado'),
@@ -145,7 +139,6 @@ export default function DashboardPage() {
       } catch (error) {
         console.error("Error fetching dashboard data: ", error);
         toast({ variant: 'destructive', title: 'Erro ao carregar dados', description: (error as Error).message });
-        // Set stats to error state
          setStats([
           { title: 'Eventos Ativos', value: 'Erro', icon: CalendarClock, color: 'text-destructive' },
           { title: 'Total de DJs', value: 'Erro', icon: Users, color: 'text-destructive' },
@@ -158,8 +151,7 @@ export default function DashboardPage() {
     };
 
     fetchData();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Added toast to dependencies for future use if needed
+  }, [toast]); 
 
   if (isLoading) {
     return (
@@ -262,10 +254,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-function toast(arg0: { variant: string; title: string; description: string; }) {
-  // This is a placeholder. Ensure you have a toast system like shadcn/ui's useToast.
-  console.error("Toast function not fully implemented here:", arg0);
-}
-
-
-    
