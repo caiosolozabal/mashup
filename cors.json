@@ -1,0 +1,17 @@
+[
+  {
+    "origin": [
+      "https://6000-firebase-studio-1749752097045.cluster-duylic2g3fbzerqpzxxbw6helm.cloudworkstations.dev",
+      "http://localhost:9002"
+    ],
+    "method": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    "responseHeader": [
+      "Content-Type",
+      "Authorization",
+      "X-Goog-Resumable",
+      "Access-Control-Allow-Origin"
+    ],
+    "maxAgeSeconds": 3600
+  }
+]
+const fileSRef = storageRef(storage, filePath);

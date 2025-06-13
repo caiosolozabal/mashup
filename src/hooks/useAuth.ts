@@ -1,3 +1,4 @@
+
 'use client';
 import { AuthContext } from '@/context/AuthContext';
 import { useContext } from 'react';
@@ -7,5 +8,6 @@ export const useAuth = () => {
   if (context === undefined) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
-  return context;
+  // context already includes user, userDetails, loading, role, dj_percentual
+  return context; 
 };

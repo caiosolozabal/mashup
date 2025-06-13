@@ -7,7 +7,7 @@ export interface UserDetails {
   email: string | null;
   displayName: string | null;
   role: UserRole;
-  percentage: number; // DJ's individual commission percentage (e.g., 70 for 70%)
+  dj_percentual?: number | null; // DJ's individual commission percentage (e.g., 0.7 for 70%)
   // other app-specific user fields
 }
 
@@ -22,6 +22,8 @@ export interface EventFile {
 export interface Event {
   id: string;
   data_evento: Date; // Stored as Firestore Timestamp, converted to Date on client
+  horario_inicio?: string | null;
+  horario_fim?: string | null;
   dia_da_semana: string;
   nome_evento: string;
   local: string;

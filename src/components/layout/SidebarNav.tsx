@@ -47,12 +47,12 @@ const navItems: NavItem[] = [
 
 export default function SidebarNav() {
   const pathname = usePathname();
-  const { role, loading } = useAuth(); 
+  const { userDetails, loading } = useAuth(); 
 
   const canView = (itemRoles?: UserRole[]) => {
     if (!itemRoles || itemRoles.length === 0) return true; // Public or always visible if no roles specified
-    if (loading || !role) return false; // Don't show role-specific items if loading or no role
-    return itemRoles.includes(role);
+    if (loading || !userDetails?.role) return false; // Don't show role-specific items if loading or no role
+    return itemRoles.includes(userDetails.role);
   };
 
   if (loading) {
@@ -75,7 +75,7 @@ export default function SidebarNav() {
     <SidebarMenu>
       {navItems.filter(item => canView(item.roles)).map((item) => (
         <SidebarMenuItem key={item.href}>
-          <Link href={item.href}>
+          <Link href={item.href} >
             <SidebarMenuButton
               isActive={pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href))}
               tooltip={{ children: item.label, side: 'right', align: 'center' }}
@@ -90,4 +90,3 @@ export default function SidebarNav() {
     </SidebarMenu>
   );
 }
-

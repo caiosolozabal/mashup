@@ -1,14 +1,13 @@
 
 'use client';
 import type { User } from 'firebase/auth';
-import { auth } from '@/lib/firebase'; // Ensure firebase is initialized before auth is imported
+import { auth, db } from '@/lib/firebase'; // Ensure firebase is initialized before auth is imported
 import { onAuthStateChanged } from 'firebase/auth';
 import type { ReactNode } from 'react';
 import { createContext, useEffect, useState, useMemo } from 'react';
 import { Loader2 } from 'lucide-react';
-// import { doc, getDoc } from 'firebase/firestore';
-// import { db } from '@/lib/firebase';
-// import type { UserDetails } from '@/lib/types';
+import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import type { UserDetails } from '@/lib/types';
 
 
 // Define user roles for Mashup Music
@@ -16,61 +15,71 @@ export type UserRole = 'admin' | 'partner' | 'dj' | null;
 
 interface AuthContextType {
   user: User | null;
-  // userDetails: UserDetails | null; 
+  userDetails: UserDetails | null; 
   loading: boolean;
-  role: UserRole; 
+  role: UserRole; // Kept for convenience, derived from userDetails.role
+  dj_percentual: number | null; // Kept for convenience, derived from userDetails.dj_percentual
 }
 
 export const AuthContext = createContext<AuthContextType>({
   user: null,
-  // userDetails: null,
+  userDetails: null,
   loading: true,
   role: null, 
+  dj_percentual: null,
 });
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
-  // const [userDetails, setUserDetails] = useState<UserDetails | null>(null);
+  const [userDetails, setUserDetails] = useState<UserDetails | null>(null);
   const [loading, setLoading] = useState(true);
+  // role and dj_percentual will be derived from userDetails but kept for quick access
   const [role, setRole] = useState<UserRole>(null);
+  const [djPercentual, setDjPercentual] = useState<number | null>(null);
+
 
   useEffect(() => {
-    if (!auth) { 
+    if (!auth || !db) { 
+      setLoading(false); // Ensure loading stops if Firebase isn't initialized
       return;
     }
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
       if (currentUser) {
-        // TODO: Fetch user details (including role and percentage) from Firestore based on currentUser.uid
-        // const userDocRef = doc(db, "users", currentUser.uid);
-        // const userDocSnap = await getDoc(userDocRef);
-        // if (userDocSnap.exists()) {
-        //   const fetchedUserDetails = userDocSnap.data() as UserDetails;
-        //   setUserDetails(fetchedUserDetails);
-        //   setRole(fetchedUserDetails.role);
-        // } else {
-        //   // Handle case where user exists in Auth but not Firestore (e.g. new registration step or error)
-        //   console.warn(`User ${currentUser.uid} not found in Firestore.`);
-        //   setUserDetails(null);
-        //   setRole(null); 
-        // }
-
-        // Simulating role detection for now based on email (placeholder)
-        // Replace this with actual Firestore role fetching
-        const email = currentUser.email || '';
-        if (email.includes('admin@mashupmusic.com')) {
-          setRole('admin');
-        } else if (email.includes('partner@mashupmusic.com') || email === 'caiozz_lj@hotmail.com') { // Example partner
-          setRole('partner');
-        } else if (email.includes('dj@mashupmusic.com')) { // Example DJ
-          setRole('dj');
-        } else {
-          setRole(null); // Default or unassigned role
+        const userDocRef = doc(db, "users", currentUser.uid);
+        try {
+          const userDocSnap = await getDoc(userDocRef);
+          if (userDocSnap.exists()) {
+            const fetchedUserDetails = userDocSnap.data() as UserDetails;
+            setUserDetails(fetchedUserDetails);
+            setRole(fetchedUserDetails.role);
+            setDjPercentual(fetchedUserDetails.dj_percentual ?? null);
+          } else {
+            // User exists in Auth but not Firestore (e.g. first login)
+            // Create a default user profile
+            const newUserDetails: UserDetails = {
+              uid: currentUser.uid,
+              email: currentUser.email,
+              displayName: currentUser.displayName || currentUser.email?.split('@')[0] || 'New User',
+              role: 'dj', // Default role
+              dj_percentual: 0.7, // Default percentage (70%)
+            };
+            await setDoc(userDocRef, { ...newUserDetails, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+            setUserDetails(newUserDetails);
+            setRole(newUserDetails.role);
+            setDjPercentual(newUserDetails.dj_percentual ?? null);
+            console.log(`New user profile created in Firestore for ${currentUser.uid}`);
+          }
+        } catch (error) {
+          console.error("Error fetching/creating user document:", error);
+          setUserDetails(null); // Fallback
+          setRole(null);
+          setDjPercentual(null);
         }
-
       } else {
-        // setUserDetails(null);
+        setUserDetails(null);
         setRole(null);
+        setDjPercentual(null);
       }
       setLoading(false);
     });
@@ -79,12 +88,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const value = useMemo(() => ({
     user,
-    // userDetails,
+    userDetails,
     loading,
-    role
-  }), [user, /*userDetails,*/ loading, role]);
+    role, // Derived from userDetails.role
+    dj_percentual: djPercentual // Derived from userDetails.dj_percentual
+  }), [user, userDetails, loading, role, djPercentual]);
 
-  if (loading && typeof window !== 'undefined' && !auth) {
+  if (loading && typeof window !== 'undefined' && (!auth || !db)) {
      return (
       <div className="flex h-screen w-screen flex-col items-center justify-center bg-background p-6 text-center">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
