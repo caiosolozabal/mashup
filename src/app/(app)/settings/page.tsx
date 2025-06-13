@@ -4,16 +4,14 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import UserManagementTab from '@/components/settings/UserManagementTab';
+import AgencyAccountsTab from '@/components/settings/AgencyAccountsTab'; // Novo import
 import { useAuth } from '@/hooks/useAuth';
 import { Building, Cog, Users } from 'lucide-react';
 
 export default function SettingsPage() {
   const { userDetails } = useAuth();
 
-  // Only admins and partners should access full settings
   if (userDetails?.role !== 'admin' && userDetails?.role !== 'partner') {
-    // DJs or other roles might see a simplified settings page or just their profile
-    // For now, redirect them or show a limited view. Let's show a message.
     return (
       <Card>
         <CardHeader>
@@ -22,7 +20,6 @@ export default function SettingsPage() {
         </CardHeader>
         <CardContent>
           <p>Entre em contato com um administrador para mais informações.</p>
-          {/* Optionally, link to their profile page: <Link href="/settings/profile">Ver meu perfil</Link> */}
         </CardContent>
       </Card>
     );
@@ -42,7 +39,7 @@ export default function SettingsPage() {
             <Users className="mr-2 h-4 w-4" />
             Usuários e DJs
           </TabsTrigger>
-          <TabsTrigger value="agency-accounts" disabled>
+          <TabsTrigger value="agency-accounts"> {/* Habilitar esta aba */}
             <Building className="mr-2 h-4 w-4" />
             Contas da Agência
           </TabsTrigger>
@@ -71,12 +68,11 @@ export default function SettingsPage() {
             <CardHeader>
               <CardTitle className="font-headline">Contas Bancárias da Agência</CardTitle>
               <CardDescription>
-                Gerencie as contas bancárias da Mashup Music. (Funcionalidade em desenvolvimento)
+                Gerencie as contas bancárias da Mashup Music.
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <p className="text-muted-foreground">Em breve: listagem e formulário para adicionar/editar contas da agência.</p>
-              {/* Placeholder for AgencyAccountsManager component */}
+              <AgencyAccountsTab /> {/* Novo componente */}
             </CardContent>
           </Card>
         </TabsContent>

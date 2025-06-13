@@ -22,13 +22,13 @@ export interface UserDetails {
 
 export interface AgencyAccount {
   id: string;
-  accountName: string;
+  accountName: string; // e.g., "Conta Principal Bradesco", "Conta Inter Lucas"
   bankName: string;
-  agencyNumber: string;
-  accountNumber: string;
+  agencyNumber?: string | null;
+  accountNumber?: string | null;
   accountType: 'corrente' | 'poupanca' | 'pj' | 'pix' | 'outra';
   pixKey?: string | null; // PIX Key for the agency account
-  notes?: string;
+  notes?: string | null;
   createdAt?: any; // Firestore Timestamp
   updatedAt?: any; // Firestore Timestamp
 }
@@ -54,7 +54,7 @@ export interface Event {
   contratante_contato?: string | null;
   valor_total: number;
   valor_sinal: number;
-  conta_que_recebeu: 'agencia' | 'dj';
+  conta_que_recebeu: 'agencia' | 'dj'; // This might later reference an AgencyAccount.id
   status_pagamento: 'pendente' | 'parcial' | 'pago' | 'vencido' | 'cancelado';
   dj_id: string;
   dj_nome: string;

@@ -4,42 +4,59 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    match /users/{userId} {
-      // Allow users to read their own data, and admins/partners to read any user data
-      allow read: if request.auth != null && (
-                    request.auth.uid == userId ||
-                    get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'partner']
-                  );
-
-      // Allow users to create their own user document (e.g., on first login)
-      // Ensure the document ID (userId) matches the authenticated user's UID
-      // and the 'uid' field within the document also matches.
-      allow create: if request.auth != null && request.auth.uid == userId && request.resource.data.uid == request.auth.uid;
-
-      // Allow users to update their own profile,
-      // and allow admins/partners to update any user profile.
-      allow update: if request.auth != null && (
-                    request.auth.uid == userId ||
-                    get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'partner']
-                  );
-      // Delete operations on user documents are generally restricted from client-side for safety.
-      // Consider implementing this via a Firebase Function if needed.
-      allow delete: if false;
+    // Helper function to check if a user has a specific role
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function getUserRole(userId) {
+      return get(/databases/$(database)/documents/users/$(userId)).data.role;
     }
 
+    function isAdminOrPartner(userId) {
+      let userRole = getUserRole(userId);
+      return userRole == 'admin' || userRole == 'partner';
+    }
+
+    // Users Collection
+    match /users/{userId} {
+      // Allow users to create their own profile
+      allow create: if isSignedIn() && request.auth.uid == userId;
+      // Allow users to read and update their own profile
+      allow read, update: if isSignedIn() && request.auth.uid == userId;
+      // Allow admins and partners to read and update any user profile
+      allow read, update: if isSignedIn() && isAdminOrPartner(request.auth.uid);
+    }
+
+    // Events Collection
     match /events/{eventId} {
-      // Any authenticated user can read events
-      allow read: if request.auth != null;
+      // Admins and Partners can do anything
+      allow read, write: if isSignedIn() && isAdminOrPartner(request.auth.uid);
 
-      // Any authenticated user can create events
-      // (This might be further restricted based on role if needed in the future)
-      allow create: if request.auth != null;
+      // DJs can read events assigned to them
+      allow read: if isSignedIn() && getUserRole(request.auth.uid) == 'dj' && resource.data.dj_id == request.auth.uid;
+      
+      // DJs can create events (e.g., if they add an event for themselves) - might need refinement
+      // allow create: if isSignedIn() && getUserRole(request.auth.uid) == 'dj' && request.resource.data.dj_id == request.auth.uid;
+      
+      // DJs can update events assigned to them (e.g., add payment proofs)
+      // Careful: This allows DJ to update any field. Consider more granular field-level security if needed.
+      // For now, focusing on payment_proofs and dj_costs.
+      allow update: if isSignedIn() && 
+                       getUserRole(request.auth.uid) == 'dj' && 
+                       resource.data.dj_id == request.auth.uid &&
+                       (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['payment_proofs', 'dj_costs', 'updated_at']));
+    }
 
-      // Only the event creator or an admin/partner can update or delete an event
-      allow update, delete: if request.auth != null && (
-                                resource.data.created_by == request.auth.uid ||
-                                get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'partner']
-                              );
+    // Agency Accounts Collection
+    match /agency_accounts/{accountId} {
+      // Admins and Partners can manage agency accounts
+      allow read, write: if isSignedIn() && isAdminOrPartner(request.auth.uid);
+    }
+
+    // Default deny all other access
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }
