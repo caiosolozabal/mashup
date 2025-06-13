@@ -14,6 +14,7 @@ export interface UserDetails {
   bankAccount?: string | null;
   bankAccountType?: 'corrente' | 'poupanca' | null;
   bankDocument?: string | null; // CPF or CNPJ
+  pixKey?: string | null; // PIX Key
 
   createdAt?: any; // Firestore Timestamp
   updatedAt?: any; // Firestore Timestamp
@@ -26,6 +27,7 @@ export interface AgencyAccount {
   agencyNumber: string;
   accountNumber: string;
   accountType: 'corrente' | 'poupanca' | 'pj' | 'pix' | 'outra';
+  pixKey?: string | null; // PIX Key for the agency account
   notes?: string;
   createdAt?: any; // Firestore Timestamp
   updatedAt?: any; // Firestore Timestamp

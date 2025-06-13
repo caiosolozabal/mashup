@@ -36,6 +36,7 @@ const editUserFormSchema = z.object({
   bankAccount: z.string().optional().nullable(),
   bankAccountType: z.enum(['corrente', 'poupanca']).optional().nullable(),
   bankDocument: z.string().optional().nullable(),
+  pixKey: z.string().optional().nullable(),
 });
 
 type EditUserFormValues = z.infer<typeof editUserFormSchema>;
@@ -68,6 +69,7 @@ export default function EditUserDialog({ user, isOpen, onClose }: EditUserDialog
       bankAccount: user.bankAccount || '',
       bankAccountType: user.bankAccountType || undefined,
       bankDocument: user.bankDocument || '',
+      pixKey: user.pixKey || '',
     },
   });
 
@@ -83,6 +85,7 @@ export default function EditUserDialog({ user, isOpen, onClose }: EditUserDialog
         bankAccount: user.bankAccount || '',
         bankAccountType: user.bankAccountType || undefined,
         bankDocument: user.bankDocument || '',
+        pixKey: user.pixKey || '',
       });
     }
   }, [user, reset]);
@@ -97,7 +100,7 @@ export default function EditUserDialog({ user, isOpen, onClose }: EditUserDialog
 
       const updateData: Partial<UserDetails> = {
         displayName: data.displayName,
-        role: data.role as UserRole, // Cast because Zod enum includes 'financeiro' which might not be in UserRole yet
+        role: data.role as UserRole, 
         updatedAt: serverTimestamp(),
       };
 
@@ -108,6 +111,7 @@ export default function EditUserDialog({ user, isOpen, onClose }: EditUserDialog
         updateData.bankAccount = data.bankAccount || null;
         updateData.bankAccountType = data.bankAccountType || null;
         updateData.bankDocument = data.bankDocument || null;
+        updateData.pixKey = data.pixKey || null;
       } else {
         // Clear DJ specific fields if role is not DJ
         updateData.dj_percentual = null;
@@ -116,6 +120,7 @@ export default function EditUserDialog({ user, isOpen, onClose }: EditUserDialog
         updateData.bankAccount = null;
         updateData.bankAccountType = null;
         updateData.bankDocument = null;
+        updateData.pixKey = null;
       }
 
       await updateDoc(userRef, updateData);
@@ -221,6 +226,11 @@ export default function EditUserDialog({ user, isOpen, onClose }: EditUserDialog
                   <Label htmlFor="bankDocument">CPF ou CNPJ</Label>
                   <Input id="bankDocument" {...register('bankDocument')} />
                 </div>
+                <div>
+                  <Label htmlFor="pixKey">Chave PIX</Label>
+                  <Input id="pixKey" {...register('pixKey')} />
+                  {errors.pixKey && <p className="text-sm text-destructive mt-1">{errors.pixKey.message}</p>}
+                </div>
               </div>
             </>
           )}
@@ -241,4 +251,3 @@ export default function EditUserDialog({ user, isOpen, onClose }: EditUserDialog
     </Dialog>
   );
 }
-
