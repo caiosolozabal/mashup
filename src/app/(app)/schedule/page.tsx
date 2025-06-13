@@ -4,7 +4,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { CalendarDays, List } from 'lucide-react';
+import { CalendarDays, List, Loader2 } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
 import type { Event, UserDetails } from '@/lib/types';
@@ -26,7 +26,7 @@ export default function SchedulePage() {
   const { user, userDetails, loading: authLoading } = useAuth();
   const [events, setEvents] = useState<Event[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [viewMode, setViewMode] = useState<ViewMode>('month');
+  const [viewMode, setViewMode] = useState<ViewMode>('list'); // Default to list view
   
   // Filters
   const [selectedDjId, setSelectedDjId] = useState<string>('all');
@@ -81,11 +81,22 @@ export default function SchedulePage() {
         // Extract unique DJs for filter (only for admin/partner)
         if (userDetails?.role === 'admin' || userDetails?.role === 'partner') {
           const djMap = new Map<string, string>();
-          eventsList.forEach(event => {
-            if (event.dj_id && event.dj_nome) {
-              djMap.set(event.dj_id, event.dj_nome);
-            }
-          });
+          // Populate from users collection if available, fallback to events
+           const usersCollection = collection(db, 'users');
+           const djsQuery = query(usersCollection, where('role', '==', 'dj'));
+           const djsSnapshot = await getDocs(djsQuery);
+           djsSnapshot.docs.forEach(doc => {
+             const djData = doc.data() as UserDetails;
+             djMap.set(djData.uid, djData.displayName || djData.email || 'DJ Desconhecido');
+           });
+           // Fallback if no users found, populate from events (less ideal)
+           if (djMap.size === 0) {
+             eventsList.forEach(event => {
+               if (event.dj_id && event.dj_nome) {
+                 djMap.set(event.dj_id, event.dj_nome);
+               }
+             });
+           }
           setAllDjs(Array.from(djMap, ([id, name]) => ({ id, name })).sort((a,b) => a.name.localeCompare(b.name)));
         }
 
@@ -129,8 +140,13 @@ export default function SchedulePage() {
   }, [events, selectedDjId, dateRange, searchTerm, userDetails?.role]);
 
 
-  if (authLoading || isLoading) {
-    return <div className="flex justify-center items-center h-64"><p>Carregando agenda...</p></div>;
+  if (authLoading || (isLoading && events.length === 0)) { // Show loader if authLoading or initial data loading
+    return (
+        <div className="flex flex-col justify-center items-center h-64 space-y-3">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <p className="text-muted-foreground">Carregando agenda...</p>
+        </div>
+    );
   }
 
   return (
@@ -140,11 +156,11 @@ export default function SchedulePage() {
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <CardTitle className="font-headline text-2xl">Agenda de Eventos</CardTitle>
             <div className="flex gap-2">
-              <Button variant={viewMode === 'month' ? 'default' : 'outline'} onClick={() => setViewMode('month')} size="sm">
-                <CalendarDays className="mr-2 h-4 w-4" /> Calendário Mensal
-              </Button>
               <Button variant={viewMode === 'list' ? 'default' : 'outline'} onClick={() => setViewMode('list')} size="sm">
                 <List className="mr-2 h-4 w-4" /> Lista de Eventos
+              </Button>
+              <Button variant={viewMode === 'month' ? 'default' : 'outline'} onClick={() => setViewMode('month')} size="sm">
+                <CalendarDays className="mr-2 h-4 w-4" /> Calendário Mensal
               </Button>
               {/* Placeholder for Week View Button */}
               {/* <Button variant={viewMode === 'week' ? 'default' : 'outline'} onClick={() => setViewMode('week')} size="sm" disabled>
@@ -196,7 +212,7 @@ export default function SchedulePage() {
               </PopoverContent>
             </Popover>
             {(userDetails?.role === 'admin' || userDetails?.role === 'partner') && (
-              <Select value={selectedDjId} onValueChange={setSelectedDjId}>
+              <Select value={selectedDjId} onValueChange={setSelectedDjId} disabled={allDjs.length === 0}>
                 <SelectTrigger>
                   <SelectValue placeholder="Filtrar por DJ" />
                 </SelectTrigger>
@@ -205,10 +221,18 @@ export default function SchedulePage() {
                   {allDjs.map(dj => (
                     <SelectItem key={dj.id} value={dj.id}>{dj.name}</SelectItem>
                   ))}
+                   {allDjs.length === 0 && <SelectItem value="no-djs" disabled>Nenhum DJ cadastrado</SelectItem>}
                 </SelectContent>
               </Select>
             )}
           </div>
+
+          {isLoading && events.length > 0 && ( // Show loader on top if reloading data but some data already exists
+             <div className="flex justify-center items-center py-4">
+                <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                <p className="ml-2 text-sm text-muted-foreground">Atualizando eventos...</p>
+             </div>
+          )}
 
           {viewMode === 'month' && <ScheduleCalendarView events={filteredEvents} />}
           {viewMode === 'list' && <ScheduleListView events={filteredEvents} djPercentual={userDetails?.dj_percentual ?? null} />}

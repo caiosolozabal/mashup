@@ -5,28 +5,15 @@ import { useState } from 'react';
 import { Calendar } from '@/components/ui/calendar';
 import type { Event } from '@/lib/types';
 import { format, isSameDay } from 'date-fns';
-import { Badge } from '@/components/ui/badge';
-import type { VariantProps } from 'class-variance-authority';
-import { badgeVariants } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import EventView from '@/components/events/EventView';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 
 interface ScheduleCalendarViewProps {
   events: Event[];
 }
-
-const getStatusVariant = (status?: Event['status_pagamento']): VariantProps<typeof badgeVariants>['variant'] => {
-  switch (status) {
-    case 'pago': return 'default';
-    case 'parcial': return 'secondary';
-    case 'pendente': return 'outline';
-    case 'vencido': return 'destructive';
-    case 'cancelado': return 'destructive';
-    default: return 'outline';
-  }
-};
 
 const getStatusText = (status?: Event['status_pagamento']): string => {
   switch (status) {
@@ -36,6 +23,17 @@ const getStatusText = (status?: Event['status_pagamento']): string => {
     case 'vencido': return 'Vencido';
     case 'cancelado': return 'Cancelado';
     default: return status || 'N/A';
+  }
+};
+
+const getEventColorVar = (status?: Event['status_pagamento']): string => {
+  switch (status) {
+    case 'pago': return '--chart-3'; // Teal
+    case 'parcial': return '--chart-4'; // Orange
+    case 'pendente': return '--destructive'; // Red
+    case 'vencido': return '--destructive'; // Red
+    case 'cancelado': return '--muted'; // Grey
+    default: return '--foreground'; // Default fallback
   }
 };
 
@@ -51,43 +49,57 @@ export default function ScheduleCalendarView({ events }: ScheduleCalendarViewPro
 
   const DayContent = (props: { date: Date }) => {
     const dayEvents = events.filter(eventItem => eventItem.data_evento && isSameDay(eventItem.data_evento, props.date));
+    const MAX_VISIBLE_EVENTS = 2;
     
     const renderDateNumber = () => (
-      <span className={`absolute top-0.5 left-0.5 text-xs ${isSameDay(props.date, new Date()) ? 'font-bold' : ''}`}>
+      <span className={`absolute top-1 left-1 text-xs ${isSameDay(props.date, new Date()) ? 'font-bold text-primary' : 'text-muted-foreground'}`}>
         {format(props.date, 'd')}
       </span>
     );
 
-    if (dayEvents.length === 0) {
-      return <div className="flex items-center justify-center w-full h-full relative">{renderDateNumber()}</div>;
-    }
-
     return (
       <TooltipProvider>
-        <div className="flex flex-col items-center justify-start w-full h-full pt-1 relative">
+        <div className="flex flex-col items-stretch justify-start w-full h-full relative pt-5 px-1 space-y-0.5 overflow-hidden">
           {renderDateNumber()}
-          <div className="flex flex-wrap justify-center items-center gap-0.5 mt-3 px-0.5">
-            {dayEvents.slice(0, 3).map(event => ( 
-              <Tooltip key={event.id} delayDuration={100}>
-                <TooltipTrigger asChild>
-                  <Badge
-                    variant={getStatusVariant(event.status_pagamento)}
-                    className="p-0.5 h-2 w-2 cursor-pointer hover:opacity-75"
-                    onClick={() => handleEventClick(event)}
-                    aria-label={`Evento: ${event.nome_evento}`}
-                  />
-                </TooltipTrigger>
-                <TooltipContent side="top" className="p-2 text-xs bg-background border-border shadow-lg rounded-md">
-                  <p className="font-semibold">{event.nome_evento}</p>
-                  {event.horario_inicio && <p>{event.horario_inicio}{event.horario_fim ? ` - ${event.horario_fim}`: ''}</p>}
-                  <p className="capitalize">{getStatusText(event.status_pagamento)}</p>
-                </TooltipContent>
-              </Tooltip>
-            ))}
-            {dayEvents.length > 3 && (
-              <span className="text-xs text-muted-foreground leading-tight">+{dayEvents.length - 3}</span>
-            )}
-          </div>
+          {dayEvents.slice(0, MAX_VISIBLE_EVENTS).map(event => (
+            <Tooltip key={event.id} delayDuration={100}>
+              <TooltipTrigger asChild>
+                <div
+                  onClick={() => handleEventClick(event)}
+                  className={cn(
+                    "text-[10px] leading-tight p-1 rounded-sm cursor-pointer hover:opacity-80 w-full text-left truncate text-white font-medium"
+                  )}
+                  style={{ backgroundColor: `hsl(var(${getEventColorVar(event.status_pagamento)}))` }}
+                  title={`${event.nome_evento} (${getStatusText(event.status_pagamento)})`}
+                >
+                  {event.horario_inicio ? `${event.horario_inicio} - ` : ''}{event.nome_evento}
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="p-2 text-xs bg-background border-border shadow-lg rounded-md">
+                <p className="font-semibold">{event.nome_evento}</p>
+                {event.horario_inicio && <p>{event.horario_inicio}{event.horario_fim ? ` - ${event.horario_fim}`: ''}</p>}
+                <p className="capitalize">{getStatusText(event.status_pagamento)}</p>
+              </TooltipContent>
+            </Tooltip>
+          ))}
+          {dayEvents.length > MAX_VISIBLE_EVENTS && (
+            <div
+              className="text-[10px] text-center text-muted-foreground py-0.5 cursor-pointer hover:underline"
+              onClick={() => {
+                // For simplicity, clicking "+N more" opens the first event of the day in a modal
+                // A more advanced implementation could show a list of all events for the day
+                if (dayEvents.length > 0) {
+                    handleEventClick(dayEvents[0]); // Or open a modal showing all dayEvents
+                }
+              }}
+              title={`Ver todos os ${dayEvents.length} eventos`}
+            >
+              +{dayEvents.length - MAX_VISIBLE_EVENTS} mais
+            </div>
+          )}
+           {dayEvents.length === 0 && (
+            <div className="flex-grow w-full"> {/* Empty div to ensure cell structure is maintained */} </div>
+          )}
         </div>
       </TooltipProvider>
     );
@@ -111,13 +123,14 @@ export default function ScheduleCalendarView({ events }: ScheduleCalendarViewPro
             today: today,
         }}
         modifiersClassNames={{
-            today: 'text-primary font-bold border-primary',
+            today: 'border-primary', // Highlights border for today
         }}
         classNames={{
-          day: "h-14 w-14 text-sm p-1", // Adjust cell size
-          day_selected: "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground",
-          head_cell: "text-muted-foreground rounded-md w-14 font-normal text-[0.8rem]",
-          cell: "h-14 w-14 text-center text-sm p-0 relative first:[&:has([aria-selected])]:rounded-l-md last:[&:has([aria-selected])]:rounded-r-md focus-within:relative focus-within:z-20",
+          day: "h-20 w-full text-sm p-0 focus-within:relative focus-within:z-10", // Adjusted cell size, removed p-1 for full control by DayContent
+          head_cell: "text-muted-foreground rounded-md w-full font-normal text-[0.8rem]",
+          cell: "h-20 w-full text-center text-sm p-0 relative first:[&:has([aria-selected])]:rounded-l-md last:[&:has([aria-selected])]:rounded-r-md", // Ensure cell itself has no padding
+          day_selected: "bg-accent/50 text-accent-foreground", // Modified selection style for better visibility of DayContent
+          day_today: "bg-transparent", // Today's specific background is handled by renderDateNumber or modifiersClassNames
         }}
       />
        <Dialog open={isViewOpen} onOpenChange={(open) => { setIsViewOpen(open); if (!open) setSelectedEventForView(null); }}>
