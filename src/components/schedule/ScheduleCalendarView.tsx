@@ -10,6 +10,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import EventView from '@/components/events/EventView';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { buttonVariants } from "@/components/ui/button"
+
 
 interface ScheduleCalendarViewProps {
   events: Event[];
@@ -28,12 +30,12 @@ const getStatusText = (status?: Event['status_pagamento']): string => {
 
 const getEventColorVar = (status?: Event['status_pagamento']): string => {
   switch (status) {
-    case 'pago': return '--chart-3'; // Teal
-    case 'parcial': return '--chart-4'; // Orange
+    case 'pago': return '--chart-3'; // Teal like
+    case 'parcial': return '--chart-4'; // Orange like
     case 'pendente': return '--destructive'; // Red
     case 'vencido': return '--destructive'; // Red
     case 'cancelado': return '--muted'; // Grey
-    default: return '--foreground'; // Default fallback
+    default: return '--foreground'; 
   }
 };
 
@@ -86,10 +88,8 @@ export default function ScheduleCalendarView({ events }: ScheduleCalendarViewPro
             <div
               className="text-[10px] text-center text-muted-foreground py-0.5 cursor-pointer hover:underline"
               onClick={() => {
-                // For simplicity, clicking "+N more" opens the first event of the day in a modal
-                // A more advanced implementation could show a list of all events for the day
                 if (dayEvents.length > 0) {
-                    handleEventClick(dayEvents[0]); // Or open a modal showing all dayEvents
+                    handleEventClick(dayEvents[0]); 
                 }
               }}
               title={`Ver todos os ${dayEvents.length} eventos`}
@@ -98,7 +98,7 @@ export default function ScheduleCalendarView({ events }: ScheduleCalendarViewPro
             </div>
           )}
            {dayEvents.length === 0 && (
-            <div className="flex-grow w-full"> {/* Empty div to ensure cell structure is maintained */} </div>
+            <div className="flex-grow w-full"> </div>
           )}
         </div>
       </TooltipProvider>
@@ -123,14 +123,38 @@ export default function ScheduleCalendarView({ events }: ScheduleCalendarViewPro
             today: today,
         }}
         modifiersClassNames={{
-            today: 'border-primary', // Highlights border for today
+            today: 'border-2 border-primary rounded-md', 
         }}
         classNames={{
-          day: "h-20 w-full text-sm p-0 focus-within:relative focus-within:z-10", // Adjusted cell size, removed p-1 for full control by DayContent
-          head_cell: "text-muted-foreground rounded-md w-full font-normal text-[0.8rem]",
-          cell: "h-20 w-full text-center text-sm p-0 relative first:[&:has([aria-selected])]:rounded-l-md last:[&:has([aria-selected])]:rounded-r-md", // Ensure cell itself has no padding
-          day_selected: "bg-accent/50 text-accent-foreground", // Modified selection style for better visibility of DayContent
-          day_today: "bg-transparent", // Today's specific background is handled by renderDateNumber or modifiersClassNames
+          // Inherit most defaults from shadcn/ui's calendar for consistency
+          months: "flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0",
+          month: "space-y-4",
+          caption: "flex justify-center pt-1 relative items-center",
+          caption_label: "text-sm font-medium",
+          nav: "space-x-1 flex items-center",
+          nav_button: cn(
+            buttonVariants({ variant: "outline" }),
+            "h-7 w-7 bg-transparent p-0 opacity-50 hover:opacity-100"
+          ),
+          nav_button_previous: "absolute left-1",
+          nav_button_next: "absolute right-1",
+          table: "w-full border-collapse space-y-1", // Ensures table takes full width
+          head_row: "flex", // Days of week row
+          head_cell: "flex-1 text-muted-foreground rounded-md font-normal text-[0.8rem] text-center p-1", // Cells share width
+          
+          row: "flex w-full mt-2", // Week row
+          cell: "flex-1 h-24 text-sm p-0 relative focus-within:relative focus-within:z-20 border-t border-border", // Cells share width, set height, custom border
+          
+          day: cn( // The interactive area within a cell
+            buttonVariants({ variant: "ghost" }), // Basic button styles
+            "h-full w-full p-0 font-normal aria-selected:opacity-100 flex items-stretch justify-stretch" // Fill cell
+          ),
+          day_selected: "bg-primary/20 text-primary-foreground ring-1 ring-primary",
+          day_today: "bg-transparent text-foreground", // Today's specific styling is handled by DayContent mostly
+          day_outside: "day-outside text-muted-foreground opacity-50 aria-selected:bg-accent/50 aria-selected:text-muted-foreground",
+          day_disabled: "text-muted-foreground opacity-50",
+          day_range_middle: "aria-selected:bg-accent aria-selected:text-accent-foreground",
+          day_hidden: "invisible",
         }}
       />
        <Dialog open={isViewOpen} onOpenChange={(open) => { setIsViewOpen(open); if (!open) setSelectedEventForView(null); }}>
