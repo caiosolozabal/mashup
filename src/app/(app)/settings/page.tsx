@@ -4,7 +4,7 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import UserManagementTab from '@/components/settings/UserManagementTab';
-import AgencyAccountsTab from '@/components/settings/AgencyAccountsTab'; // Novo import
+import AgencyAccountsTab from '@/components/settings/AgencyAccountsTab';
 import { useAuth } from '@/hooks/useAuth';
 import { Building, Cog, Users } from 'lucide-react';
 
@@ -39,11 +39,11 @@ export default function SettingsPage() {
             <Users className="mr-2 h-4 w-4" />
             Usuários e DJs
           </TabsTrigger>
-          <TabsTrigger value="agency-accounts"> {/* Habilitar esta aba */}
+          <TabsTrigger value="agency-accounts">
             <Building className="mr-2 h-4 w-4" />
             Contas da Agência
           </TabsTrigger>
-          <TabsTrigger value="general-settings" disabled>
+          <TabsTrigger value="general-settings"> {/* Enabled this tab */}
             <Cog className="mr-2 h-4 w-4" />
             Geral
           </TabsTrigger>
@@ -72,7 +72,7 @@ export default function SettingsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <AgencyAccountsTab /> {/* Novo componente */}
+              <AgencyAccountsTab />
             </CardContent>
           </Card>
         </TabsContent>
