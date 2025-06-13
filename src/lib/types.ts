@@ -8,8 +8,29 @@ export interface UserDetails {
   displayName: string | null;
   role: UserRole;
   dj_percentual?: number | null; // DJ's individual commission percentage (e.g., 0.7 for 70%)
-  // other app-specific user fields
+  // Bank details for DJs
+  bankName?: string | null;
+  bankAgency?: string | null;
+  bankAccount?: string | null;
+  bankAccountType?: 'corrente' | 'poupanca' | null;
+  bankDocument?: string | null; // CPF or CNPJ
+
+  createdAt?: any; // Firestore Timestamp
+  updatedAt?: any; // Firestore Timestamp
 }
+
+export interface AgencyAccount {
+  id: string;
+  accountName: string;
+  bankName: string;
+  agencyNumber: string;
+  accountNumber: string;
+  accountType: 'corrente' | 'poupanca' | 'pj' | 'pix' | 'outra';
+  notes?: string;
+  createdAt?: any; // Firestore Timestamp
+  updatedAt?: any; // Firestore Timestamp
+}
+
 
 export interface EventFile {
   id: string; // Can be file name or a generated ID
