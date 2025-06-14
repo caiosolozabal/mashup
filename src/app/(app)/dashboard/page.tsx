@@ -3,16 +3,16 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
-import { BarChart, CalendarClock, ListChecks, Users, Loader2 } from 'lucide-react';
+import { BarChart, CalendarClock, ListChecks, Users, Loader2, CheckCircle2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { db } from '@/lib/firebase';
 import { collection, getDocs, query, where, orderBy, limit, Timestamp } from 'firebase/firestore';
-import type { Event, UserDetails } from '@/lib/types';
-import { format, startOfMonth, endOfMonth } from 'date-fns';
+import type { Event } from '@/lib/types';
+import { format, startOfMonth, endOfMonth, isWithinInterval, subMonths } from 'date-fns';
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
 
-interface StatCard {
+interface StatCardData {
   title: string;
   value: string | number;
   icon: React.ElementType;
@@ -32,33 +32,49 @@ interface DashboardEvent {
 }
 
 export default function DashboardPage() {
-  const { user } = useAuth();
+  const { user, userDetails } = useAuth();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(true);
-  const [stats, setStats] = useState<StatCard[]>([]);
+  const [stats, setStats] = useState<StatCardData[]>([]);
   const [recentActivities, setRecentActivities] = useState<DashboardEvent[]>([]);
   const [upcomingEvents, setUpcomingEvents] = useState<DashboardEvent[]>([]);
 
   useEffect(() => {
     const fetchData = async () => {
       setIsLoading(true);
-      if (!db) {
-        console.error("Firestore not initialized");
+      if (!db || !user || !userDetails) {
+        console.error("Firestore, user, or userDetails not available");
         setIsLoading(false);
-        setStats([
-          { title: 'Eventos Ativos', value: 'Erro', icon: CalendarClock, color: 'text-destructive' },
-          { title: 'Total de DJs', value: 'Erro', icon: Users, color: 'text-destructive' },
-          { title: 'Próximos Eventos', value: 'Erro', icon: ListChecks, color: 'text-destructive' },
-          { title: 'Receita (Mês)', value: 'Erro', icon: BarChart, color: 'text-destructive' },
-        ]);
+        // Set default error stats
+        const errorStats = [
+          { title: 'Eventos', value: 'Erro', icon: CalendarClock, color: 'text-destructive' },
+          { title: 'Métricas', value: 'Erro', icon: Users, color: 'text-destructive' },
+          { title: 'Agendamentos', value: 'Erro', icon: ListChecks, color: 'text-destructive' },
+          { title: 'Financeiro', value: 'Erro', icon: BarChart, color: 'text-destructive' },
+        ];
+        setStats(errorStats);
         return;
       }
 
       try {
         const eventsCollectionRef = collection(db, 'events');
-        const allEventsQuery = query(eventsCollectionRef, where('status_pagamento', '!=', 'cancelado'));
-        const allEventsSnapshot = await getDocs(allEventsQuery);
-        const allEventsList = allEventsSnapshot.docs.map(doc => {
+        const now = new Date();
+        const currentMonthStart = startOfMonth(now);
+        const currentMonthEnd = endOfMonth(now);
+        const lastMonthStart = startOfMonth(subMonths(now, 1));
+        const lastMonthEnd = endOfMonth(subMonths(now, 1));
+
+
+        let fetchedEvents: Event[] = [];
+        let specificQueries: any[] = [where('status_pagamento', '!=', 'cancelado')];
+
+        if (userDetails.role === 'dj') {
+          specificQueries.push(where('dj_id', '==', user.uid));
+        }
+        
+        const eventsQuery = query(eventsCollectionRef, ...specificQueries);
+        const eventsSnapshot = await getDocs(eventsQuery);
+        fetchedEvents = eventsSnapshot.docs.map(doc => {
           const data = doc.data();
           return {
             id: doc.id,
@@ -66,94 +82,105 @@ export default function DashboardPage() {
             data_evento: data.data_evento instanceof Timestamp ? data.data_evento.toDate() : new Date(data.data_evento),
             created_at: data.created_at instanceof Timestamp ? data.created_at.toDate() : (data.created_at ? new Date(data.created_at) : new Date()),
             updated_at: data.updated_at instanceof Timestamp ? data.updated_at.toDate() : (data.updated_at ? new Date(data.updated_at) : new Date()),
+            dj_costs: data.dj_costs ?? 0,
           } as Event;
         });
 
-        const activeEventsCount = allEventsList.length;
-
-        const usersCollectionRef = collection(db, 'users');
-        const djsQuery = query(usersCollectionRef, where('role', '==', 'dj'));
-        const djsSnapshot = await getDocs(djsQuery);
-        const totalDjsCount = djsSnapshot.size;
-
-        const now = new Date();
-        const upcomingGigsCount = allEventsList.filter(event => event.data_evento > now).length;
-
-        const currentMonthStart = startOfMonth(now);
-        const currentMonthEnd = endOfMonth(now);
-        const monthlyRevenue = allEventsList
+        // Stats common to all roles (calculated from potentially filtered events)
+        const activeEventsCount = fetchedEvents.length;
+        const upcomingGigsCount = fetchedEvents.filter(event => event.data_evento > now).length;
+        
+        const monthlyRevenue = fetchedEvents
           .filter(event => 
-            event.data_evento >= currentMonthStart && 
-            event.data_evento <= currentMonthEnd &&
+            isWithinInterval(event.data_evento, { start: currentMonthStart, end: currentMonthEnd }) &&
             event.status_pagamento === 'pago'
           )
           .reduce((sum, event) => sum + (event.valor_total || 0), 0);
 
-        setStats([
-          { title: 'Eventos Ativos', value: activeEventsCount, icon: CalendarClock, color: 'text-primary' },
-          { title: 'Total de DJs', value: totalDjsCount, icon: Users, color: 'text-accent' },
-          { title: 'Próximos Agendamentos', value: upcomingGigsCount, icon: ListChecks, color: 'text-green-500' },
-          { title: `Receita (Mês ${format(now, 'MM/yy')})`, value: monthlyRevenue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }), icon: BarChart, color: 'text-blue-500' },
-        ]);
+        // Role-specific stats and recent/upcoming lists
+        let newStats: StatCardData[] = [];
 
-        const recentActivityQuery = query(
-          eventsCollectionRef, 
-          where('status_pagamento', '!=', 'cancelado'),
-          orderBy('updated_at', 'desc'), 
-          limit(3)
-        );
-        const recentActivitySnapshot = await getDocs(recentActivityQuery);
-        const recentActivitiesList = recentActivitySnapshot.docs.map(doc => {
-          const data = doc.data();
-          return {
-            id: doc.id,
-            nome_evento: data.nome_evento,
-            local: data.local,
-            data_evento: data.data_evento instanceof Timestamp ? data.data_evento.toDate() : new Date(data.data_evento),
-            updated_at: data.updated_at instanceof Timestamp ? data.updated_at.toDate() : new Date(data.updated_at),
-            created_at: data.created_at instanceof Timestamp ? data.created_at.toDate() : new Date(data.created_at),
-          } as DashboardEvent;
+        if (userDetails.role === 'dj') {
+          const completedLastMonthCount = fetchedEvents.filter(event => 
+            isWithinInterval(event.data_evento, { start: lastMonthStart, end: lastMonthEnd }) && 
+            (event.status_pagamento === 'pago' || event.status_pagamento === 'parcial') // Consider paid or partially paid as completed
+          ).length;
+
+          newStats = [
+            { title: 'Seus Eventos Ativos', value: activeEventsCount, icon: CalendarClock, color: 'text-primary' },
+            { title: 'Eventos Concluídos (Mês Anterior)', value: completedLastMonthCount, icon: CheckCircle2, color: 'text-accent' },
+            { title: 'Seus Próximos Agendamentos', value: upcomingGigsCount, icon: ListChecks, color: 'text-green-500' },
+            { title: `Sua Receita Bruta (Mês ${format(now, 'MM/yy')})`, value: monthlyRevenue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }), icon: BarChart, color: 'text-blue-500' },
+          ];
+        } else { // Admin or Partner
+          const usersCollectionRef = collection(db, 'users');
+          const djsQuery = query(usersCollectionRef, where('role', '==', 'dj'));
+          const djsSnapshot = await getDocs(djsQuery);
+          const totalDjsCount = djsSnapshot.size;
+
+          newStats = [
+            { title: 'Eventos Ativos (Total)', value: activeEventsCount, icon: CalendarClock, color: 'text-primary' },
+            { title: 'Total de DJs Cadastrados', value: totalDjsCount, icon: Users, color: 'text-accent' },
+            { title: 'Próximos Agendamentos (Total)', value: upcomingGigsCount, icon: ListChecks, color: 'text-green-500' },
+            { title: `Faturamento Bruto (Mês ${format(now, 'MM/yy')})`, value: monthlyRevenue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }), icon: BarChart, color: 'text-blue-500' },
+          ];
+        }
+        setStats(newStats);
+
+        // Recent Activities - based on fetchedEvents (already role-filtered if DJ)
+        // Order by updated_at if available and different from created_at, otherwise by created_at
+        const sortedRecentActivities = [...fetchedEvents].sort((a, b) => {
+            const aDate = (a.updated_at && a.updated_at.getTime() !== a.created_at.getTime()) ? a.updated_at : a.created_at;
+            const bDate = (b.updated_at && b.updated_at.getTime() !== b.created_at.getTime()) ? b.updated_at : b.created_at;
+            return bDate.getTime() - aDate.getTime();
         });
-        setRecentActivities(recentActivitiesList);
+        setRecentActivities(sortedRecentActivities.slice(0, 3).map(e => ({
+            id: e.id,
+            nome_evento: e.nome_evento,
+            local: e.local,
+            data_evento: e.data_evento,
+            created_at: e.created_at,
+            updated_at: e.updated_at,
+        })));
 
-        const upcomingEventsQuery = query(
-          eventsCollectionRef, 
-          where('status_pagamento', '!=', 'cancelado'),
-          where('data_evento', '>', now),
-          orderBy('data_evento', 'asc'), 
-          limit(3)
-        );
-        const upcomingEventsSnapshot = await getDocs(upcomingEventsQuery);
-        const upcomingEventsList = upcomingEventsSnapshot.docs.map(doc => {
-          const data = doc.data();
-          return {
-            id: doc.id,
-            nome_evento: data.nome_evento,
-            local: data.local,
-            data_evento: data.data_evento instanceof Timestamp ? data.data_evento.toDate() : new Date(data.data_evento),
-            horario_inicio: data.horario_inicio,
-          } as DashboardEvent;
-        });
-        setUpcomingEvents(upcomingEventsList);
 
-      } catch (error) {
+        // Upcoming Events - based on fetchedEvents (already role-filtered if DJ)
+        const sortedUpcomingEvents = fetchedEvents
+            .filter(event => event.data_evento > now)
+            .sort((a, b) => a.data_evento.getTime() - b.data_evento.getTime());
+        setUpcomingEvents(sortedUpcomingEvents.slice(0,3).map(e => ({
+            id: e.id,
+            nome_evento: e.nome_evento,
+            local: e.local,
+            data_evento: e.data_evento,
+            horario_inicio: e.horario_inicio,
+        })));
+
+
+      } catch (error: any) {
         console.error("Error fetching dashboard data: ", error);
-        toast({ variant: 'destructive', title: 'Erro ao carregar dados', description: (error as Error).message });
-         setStats([
-          { title: 'Eventos Ativos', value: 'Erro', icon: CalendarClock, color: 'text-destructive' },
-          { title: 'Total de DJs', value: 'Erro', icon: Users, color: 'text-destructive' },
-          { title: 'Próximos Eventos', value: 'Erro', icon: ListChecks, color: 'text-destructive' },
-          { title: 'Receita (Mês)', value: 'Erro', icon: BarChart, color: 'text-destructive' },
-        ]);
+        toast({ variant: 'destructive', title: 'Erro ao carregar dados do painel', description: error.message });
+         const errorStats = [
+          { title: 'Eventos', value: 'Erro', icon: CalendarClock, color: 'text-destructive' },
+          { title: 'Métricas', value: 'Erro', icon: Users, color: 'text-destructive' },
+          { title: 'Agendamentos', value: 'Erro', icon: ListChecks, color: 'text-destructive' },
+          { title: 'Financeiro', value: 'Erro', icon: BarChart, color: 'text-destructive' },
+        ];
+        setStats(errorStats);
       } finally {
         setIsLoading(false);
       }
     };
 
-    fetchData();
-  }, [toast]); 
+    if (user && userDetails) { // Ensure user and userDetails are loaded before fetching
+      fetchData();
+    } else if (!user && !userDetails && !useAuth().loading) { // If auth is done loading and no user/details
+        setIsLoading(false); // Stop loading, likely redirecting or showing login
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, userDetails, toast]); // Removed useAuth().loading from deps to avoid potential loop if useAuth itself causes re-renders
 
-  if (isLoading) {
+  if (isLoading || useAuth().loading) { // Show loader if either dashboard data or auth state is loading
     return (
       <div className="flex flex-col items-center justify-center h-full space-y-4">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -161,15 +188,26 @@ export default function DashboardPage() {
       </div>
     );
   }
+  
+  if (!user) {
+    // This case should ideally be handled by a redirect in a higher-level component (like HomePage)
+    // or by the AuthProvider contextconsumer.
+    return (
+        <div className="flex flex-col items-center justify-center h-full space-y-4">
+            <p className="text-muted-foreground">Você não está logado. Redirecionando...</p>
+        </div>
+    )
+  }
+
 
   return (
     <div className="flex flex-col space-y-8">
       <div className="space-y-2">
         <h1 className="text-3xl font-bold tracking-tight font-headline">
-          Olá, {user?.displayName || user?.email || 'Usuário'}!
+          Olá, {userDetails?.displayName || user?.displayName || user?.email || 'Usuário'}!
         </h1>
         <p className="text-muted-foreground">
-          Aqui está uma visão geral das atividades da sua agência.
+          Aqui está uma visão geral das suas atividades e da agência.
         </p>
       </div>
 
@@ -202,15 +240,15 @@ export default function DashboardPage() {
                 {recentActivities.map(activity => (
                   <div key={activity.id} className="flex items-center p-2.5 bg-secondary/50 rounded-md">
                     <CalendarClock className="h-5 w-5 mr-3 text-primary flex-shrink-0" />
-                    <div className="text-sm">
-                      <p className="font-semibold">{activity.nome_evento}</p>
+                    <div className="text-sm overflow-hidden">
+                      <p className="font-semibold truncate" title={activity.nome_evento}>{activity.nome_evento}</p>
                       <p className="text-xs text-muted-foreground">
                         {activity.updated_at && activity.created_at && format(activity.updated_at, 'dd/MM/yy HH:mm') !== format(activity.created_at, 'dd/MM/yy HH:mm') 
                           ? `Atualizado em: ${format(activity.updated_at, 'dd/MM/yyyy HH:mm')}`
                           : `Criado em: ${format(activity.created_at || new Date(), 'dd/MM/yyyy HH:mm')}`}
                       </p>
                     </div>
-                     <Button variant="outline" size="sm" asChild className="ml-auto">
+                     <Button variant="outline" size="sm" asChild className="ml-auto flex-shrink-0">
                         <Link href={`/events?view=${activity.id}`}>Ver</Link>
                     </Button>
                   </div>
@@ -231,15 +269,15 @@ export default function DashboardPage() {
               <div className="space-y-3">
                 {upcomingEvents.map(event => (
                   <div key={event.id} className="flex items-center justify-between p-2.5 bg-secondary/50 rounded-md">
-                    <div>
-                      <p className="font-semibold text-sm">{event.nome_evento}</p>
+                    <div className="overflow-hidden">
+                      <p className="font-semibold text-sm truncate" title={event.nome_evento}>{event.nome_evento}</p>
                       <p className="text-xs text-muted-foreground">
                         {format(event.data_evento, 'dd/MM/yyyy')}
                         {event.horario_inicio ? ` às ${event.horario_inicio}` : ''}
                         {event.local ? ` - ${event.local}` : ''}
                       </p>
                     </div>
-                    <Button variant="outline" size="sm" asChild>
+                    <Button variant="outline" size="sm" asChild className="flex-shrink-0">
                         <Link href={`/events?view=${event.id}`}>Ver</Link>
                     </Button>
                   </div>
