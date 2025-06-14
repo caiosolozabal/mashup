@@ -32,7 +32,7 @@ interface DashboardEvent {
 }
 
 export default function DashboardPage() {
-  const { user, userDetails } = useAuth();
+  const { user, userDetails, loading: authLoading } = useAuth(); // Get authLoading here
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(true);
   const [stats, setStats] = useState<StatCardData[]>([]);
@@ -43,9 +43,8 @@ export default function DashboardPage() {
     const fetchData = async () => {
       setIsLoading(true);
       if (!db || !user || !userDetails) {
-        console.error("Firestore, user, or userDetails not available");
+        console.error("Firestore, user, or userDetails not available for fetchData");
         setIsLoading(false);
-        // Set default error stats
         const errorStats = [
           { title: 'Eventos', value: 'Erro', icon: CalendarClock, color: 'text-destructive' },
           { title: 'Métricas', value: 'Erro', icon: Users, color: 'text-destructive' },
@@ -63,7 +62,6 @@ export default function DashboardPage() {
         const currentMonthEnd = endOfMonth(now);
         const lastMonthStart = startOfMonth(subMonths(now, 1));
         const lastMonthEnd = endOfMonth(subMonths(now, 1));
-
 
         let fetchedEvents: Event[] = [];
         let specificQueries: any[] = [where('status_pagamento', '!=', 'cancelado')];
@@ -86,7 +84,6 @@ export default function DashboardPage() {
           } as Event;
         });
 
-        // Stats common to all roles (calculated from potentially filtered events)
         const activeEventsCount = fetchedEvents.length;
         const upcomingGigsCount = fetchedEvents.filter(event => event.data_evento > now).length;
         
@@ -97,13 +94,12 @@ export default function DashboardPage() {
           )
           .reduce((sum, event) => sum + (event.valor_total || 0), 0);
 
-        // Role-specific stats and recent/upcoming lists
         let newStats: StatCardData[] = [];
 
         if (userDetails.role === 'dj') {
           const completedLastMonthCount = fetchedEvents.filter(event => 
             isWithinInterval(event.data_evento, { start: lastMonthStart, end: lastMonthEnd }) && 
-            (event.status_pagamento === 'pago' || event.status_pagamento === 'parcial') // Consider paid or partially paid as completed
+            (event.status_pagamento === 'pago' || event.status_pagamento === 'parcial')
           ).length;
 
           newStats = [
@@ -112,7 +108,7 @@ export default function DashboardPage() {
             { title: 'Seus Próximos Agendamentos', value: upcomingGigsCount, icon: ListChecks, color: 'text-green-500' },
             { title: `Sua Receita Bruta (Mês ${format(now, 'MM/yy')})`, value: monthlyRevenue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }), icon: BarChart, color: 'text-blue-500' },
           ];
-        } else { // Admin or Partner
+        } else { 
           const usersCollectionRef = collection(db, 'users');
           const djsQuery = query(usersCollectionRef, where('role', '==', 'dj'));
           const djsSnapshot = await getDocs(djsQuery);
@@ -127,13 +123,12 @@ export default function DashboardPage() {
         }
         setStats(newStats);
 
-        // Recent Activities - based on fetchedEvents (already role-filtered if DJ)
-        // Order by updated_at if available and different from created_at, otherwise by created_at
         const sortedRecentActivities = [...fetchedEvents].sort((a, b) => {
-            const aDate = (a.updated_at && a.updated_at.getTime() !== a.created_at.getTime()) ? a.updated_at : a.created_at;
-            const bDate = (b.updated_at && b.updated_at.getTime() !== b.created_at.getTime()) ? b.updated_at : b.created_at;
+            const aDate = (a.updated_at && a.created_at && a.updated_at.getTime() !== a.created_at.getTime()) ? a.updated_at : (a.created_at || new Date(0));
+            const bDate = (b.updated_at && b.created_at && b.updated_at.getTime() !== b.created_at.getTime()) ? b.updated_at : (b.created_at || new Date(0));
             return bDate.getTime() - aDate.getTime();
         });
+
         setRecentActivities(sortedRecentActivities.slice(0, 3).map(e => ({
             id: e.id,
             nome_evento: e.nome_evento,
@@ -143,8 +138,6 @@ export default function DashboardPage() {
             updated_at: e.updated_at,
         })));
 
-
-        // Upcoming Events - based on fetchedEvents (already role-filtered if DJ)
         const sortedUpcomingEvents = fetchedEvents
             .filter(event => event.data_evento > now)
             .sort((a, b) => a.data_evento.getTime() - b.data_evento.getTime());
@@ -155,7 +148,6 @@ export default function DashboardPage() {
             data_evento: e.data_evento,
             horario_inicio: e.horario_inicio,
         })));
-
 
       } catch (error: any) {
         console.error("Error fetching dashboard data: ", error);
@@ -172,15 +164,19 @@ export default function DashboardPage() {
       }
     };
 
-    if (user && userDetails) { // Ensure user and userDetails are loaded before fetching
-      fetchData();
-    } else if (!user && !userDetails && !useAuth().loading) { // If auth is done loading and no user/details
-        setIsLoading(false); // Stop loading, likely redirecting or showing login
+    if (authLoading) { // If auth is still loading, dashboard also is loading
+      setIsLoading(true);
+      return;
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, userDetails, toast]); // Removed useAuth().loading from deps to avoid potential loop if useAuth itself causes re-renders
 
-  if (isLoading || useAuth().loading) { // Show loader if either dashboard data or auth state is loading
+    if (user && userDetails) { 
+      fetchData();
+    } else if (!user && !userDetails && !authLoading) { // Auth is done, no user/details
+        setIsLoading(false); 
+    }
+  }, [user, userDetails, authLoading, toast]); // Added authLoading to dependencies
+
+  if (isLoading || authLoading) { // Show loader if either dashboard data or auth state is loading
     return (
       <div className="flex flex-col items-center justify-center h-full space-y-4">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -190,15 +186,12 @@ export default function DashboardPage() {
   }
   
   if (!user) {
-    // This case should ideally be handled by a redirect in a higher-level component (like HomePage)
-    // or by the AuthProvider contextconsumer.
     return (
         <div className="flex flex-col items-center justify-center h-full space-y-4">
             <p className="text-muted-foreground">Você não está logado. Redirecionando...</p>
         </div>
     )
   }
-
 
   return (
     <div className="flex flex-col space-y-8">
